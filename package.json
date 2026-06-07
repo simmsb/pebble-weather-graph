@@ -1,0 +1,47 @@
+{
+  "name": "pebble-weather-graph",
+  "author": "simmsb",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.10",
+    "pebble-fctx": "^1.6.1"
+  },
+  "pebble": {
+    "displayName": "pebble-weather-graph",
+    "uuid": "41ff9e37-899b-4211-9056-f353d2d58dd2",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": [
+      "WEATHER_REQUEST",
+      "WEATHER_SEG_UPDATE_IDX",
+      "WEATHER_SEG_TEMPERATURE",
+      "WEATHER_SEG_RAIN_CHANCE",
+      "WEATHER_SEG_CLOUD_COVER",
+      "WEATHER_SEG_SUN_LEVEL",
+      "WEATHER_SEG_IS_DAY",
+      "WEATHER_SEG_UV_INDEX",
+      "WEATHER_DAY_UPDATE_IDX",
+      "WEATHER_DAY_TEMP_HIGH",
+      "WEATHER_DAY_TEMP_LOW",
+      "WEATHER_DAY_NAME",
+      "WEATHER_REPORT_START",
+      "WEATHER_LOCATION_NAME",
+      "SETTING_ACCENT_COLOR"
+    ],
+    "resources": {
+      "media": []
+    },
+    "capabilities": [
+      "location",
+      "configurable"
+    ]
+  }
+}

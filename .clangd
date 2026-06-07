@@ -1,0 +1,4 @@
+Documentation:
+  CommentFormat: Doxygen
+CompileFlags:
+  BuiltinHeaders: QueryDriver
