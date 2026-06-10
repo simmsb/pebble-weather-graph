@@ -41,21 +41,11 @@ static void prv_request_weather(void);
 static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   time_layer_update(s_time_layer, tick_time, settings_get());
 
-  // Request fresh weather every hour and re-push cached data so that
-  // current_hour advances in all graph layers regardless of whether a new
-  // fetch succeeds.
   if (units_changed & HOUR_UNIT) {
     prv_request_weather();
   }
 }
 
-/**
- * Handle incoming AppMessage; parse weather fields and push to layers if
- * complete.
- *
- * @param iter     Incoming message dictionary iterator.
- * @param context  Unused callback context.
- */
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   DictionaryIterator orig = *iter;
   settings_apply_from_message(iter);
@@ -118,13 +108,11 @@ static void prv_window_load(Window *window) {
 }
 
 static void prv_window_unload(Window *window) {
+  printf("Window unload!");
   time_layer_destroy(s_time_layer);
   top_bar_layer_destroy(s_top_bar_layer);
+  biometrics_layer_destroy(s_biometrics_layer);
 }
-
-//
-// App lifecycle
-//
 
 static void init(void) {
   settings_init();

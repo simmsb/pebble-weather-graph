@@ -14,7 +14,7 @@
       {
         devShell = pebble.pebbleEnv.${system} {
           emulatorTarget = "emery";
-          packages = [ pkgs.llvmPackages_22.clang-tools ];
+          packages = [ pkgs.llvmPackages_22.clang-tools pkgs.watchexec ];
           # cloudPebble = true;
       };
     });

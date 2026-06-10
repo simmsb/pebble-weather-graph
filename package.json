@@ -37,7 +37,14 @@
       "SETTING_ACCENT_COLOR"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "font",
+          "name": "LM_MONO_48",
+          "file": "fonts/lm_mono.otf",
+          "characterRegex": "[0-9: ]"
+        }
+      ]
     },
     "capabilities": [
       "location",

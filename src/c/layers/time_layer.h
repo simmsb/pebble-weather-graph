@@ -2,13 +2,14 @@
 #include "../modules/settings.h"
 #include <pebble.h>
 
-#define TL_TIME_FONT_KEY FONT_KEY_ROBOTO_BOLD_SUBSET_49
+#define TL_TIME_FONT_KEY RESOURCE_ID_LM_MONO_48
 #define TL_TIME_H 49
 #define TL_TIME_Y_TOP 0
 
 typedef struct {
   Layer *container;
   TextLayer *time_label;
+  GFont font;
   char time_buf[8];
 } TimeLayer;
 

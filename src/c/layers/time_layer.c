@@ -13,7 +13,8 @@ TimeLayer *time_layer_create(GRect frame) {
   tl->container = layer_create(frame);
   int w         = frame.size.w;
 
-  GFont time_font = fonts_get_system_font(TL_TIME_FONT_KEY);
+  GFont time_font = fonts_load_custom_font(resource_get_handle(TL_TIME_FONT_KEY));
+  tl->font = time_font;
   tl->time_label  = text_layer_create(GRect(0, 0, w, TL_TIME_H));
   text_layer_set_background_color(tl->time_label, GColorClear);
   text_layer_set_text_color(tl->time_label, GColorBlack);
@@ -29,8 +30,8 @@ void time_layer_destroy(TimeLayer *layer) {
   if (!layer)
     return;
   text_layer_destroy(layer->time_label);
+  fonts_unload_custom_font(layer->font);
   layer_destroy(layer->container);
-  free(layer);
 }
 
 Layer *time_layer_get_layer(TimeLayer *layer) {

@@ -15,4 +15,4 @@ AlignConsecutiveAssignments:
 BinPackParameters: true
 BinPackArguments: true
 
-ColumnLimit: 120
+ColumnLimit: 100

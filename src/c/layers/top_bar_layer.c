@@ -66,7 +66,8 @@ static void prv_update_proc(Layer *layer, GContext *ctx) {
 TopBarLayer *top_bar_layer_create(GRect frame) {
   TopBarLayer *tl = &s_top_bar_layer;
 
-  tl->container                                  = layer_create_with_data(frame, sizeof(TopBarLayer *));
+  tl->container = layer_create_with_data(frame, sizeof(TopBarLayer *));
+
   *(TopBarLayer **)layer_get_data(tl->container) = tl;
 
   layer_set_update_proc(tl->container, prv_update_proc);
@@ -78,7 +79,6 @@ void top_bar_layer_destroy(TopBarLayer *layer) {
   if (!layer)
     return;
   layer_destroy(layer->container);
-  free(layer);
 }
 
 Layer *top_bar_layer_get_layer(TopBarLayer *layer) { return layer ? layer->container : NULL; }
