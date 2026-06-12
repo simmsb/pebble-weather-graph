@@ -5,6 +5,8 @@
 #
 import os.path
 
+from waflib.Task import Task
+
 top = '.'
 out = 'build'
 
@@ -53,3 +55,18 @@ def build(ctx):
                                          'src/pkjs/**/*.json',
                                          'src/common/**/*.js']),
                    js_entry_file='src/pkjs/index.js')
+
+orig_exec_command = Task.exec_command
+
+def custom_exec_command(self, cmd, **kw):
+    if isinstance(cmd, list) and len(cmd) > 0 and ('gcc' in cmd[0] or 'cc' in cmd[0]):
+        new_cmd = []
+        for arg in cmd:
+            if arg.startswith('-I') and ('sdk' in arg.lower() or 'pebble' in arg.lower()):
+                new_cmd.append('-isystem' + arg[2:])
+            else:
+                new_cmd.append(arg)
+        cmd = new_cmd
+    return orig_exec_command(self, cmd, **kw)
+
+Task.exec_command = custom_exec_command

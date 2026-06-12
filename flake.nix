@@ -15,6 +15,7 @@
         devShell = pebble.pebbleEnv.${system} {
           emulatorTarget = "emery";
           packages = [ pkgs.llvmPackages_22.clang-tools pkgs.watchexec ];
+          CFLAGS = "-O3 -ffast-math -pedantic -std=gnu23";
           # cloudPebble = true;
       };
     });

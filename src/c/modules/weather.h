@@ -4,7 +4,8 @@
 
 #define WEATHER_NUM_HOURS 48
 #define WEATHER_NUM_DAYS 2
-#define WEATHER_NUM_SEGMENTS WEATHER_NUM_HOURS * 4
+#define TL_WEATHER_SEGS_PER_HOUR 4
+#define WEATHER_NUM_SEGMENTS (WEATHER_NUM_HOURS * TL_WEATHER_SEGS_PER_HOUR)
 #define WEATHER_CITY_MAX_LEN 24
 
 typedef struct {
@@ -17,6 +18,10 @@ typedef struct {
 } WeatherSegment;
 
 typedef struct {
+  int8_t rain_amount;
+} WeatherHourlySegment;
+
+typedef struct {
   int8_t temp_high;
   int8_t temp_low;
   uint8_t day;
@@ -24,9 +29,10 @@ typedef struct {
 
 typedef struct {
   WeatherSegment segments[WEATHER_NUM_SEGMENTS];
+  WeatherHourlySegment hourly_segments[WEATHER_NUM_HOURS];
   WeatherDaily daily[WEATHER_NUM_DAYS];
 
-  time_t reportStart;
+  time_t reportStart; // when this was fetched
   char locationName[WEATHER_CITY_MAX_LEN];
 } Weather;
 

@@ -1,3 +1,4 @@
+#include "c/layers/weather_layer.h"
 #include "layers/biometrics_layer.h"
 #include "layers/time_layer.h"
 #include "layers/top_bar_layer.h"
@@ -35,11 +36,13 @@ static Window *s_main_window;
 static TimeLayer *s_time_layer;
 static TopBarLayer *s_top_bar_layer;
 static BiometricsLayer *s_biometrics_layer;
+static WeatherLayer *s_weather_layer;
 
 static void prv_request_weather(void);
 
 static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   time_layer_update(s_time_layer, tick_time, settings_get());
+  weather_layer_update(s_weather_layer);
 
   if (units_changed & HOUR_UNIT) {
     prv_request_weather();
@@ -100,18 +103,25 @@ static void prv_window_load(Window *window) {
   layer_add_child(root, biometrics_layer_get_layer(s_biometrics_layer));
   y += TL_BIOMETRICS_H;
 
+  y += TL_WEATHER_Y_PAD;
+  s_weather_layer = weather_layer_create((GRect(0, y, w, TL_WEATHER_HEIGHT)), weather_get());
+  layer_add_child(root, weather_layer_get_layer(s_weather_layer));
+  y += TL_WEATHER_HEIGHT;
+
   // Seed time display immediately
   time_t now_t   = time(NULL);
   struct tm *now = localtime(&now_t);
-  if (now)
+  if (now) {
     time_layer_update(s_time_layer, now, settings_get());
+    weather_layer_update(s_weather_layer);
+  }
 }
 
 static void prv_window_unload(Window *window) {
-  printf("Window unload!");
   time_layer_destroy(s_time_layer);
   top_bar_layer_destroy(s_top_bar_layer);
   biometrics_layer_destroy(s_biometrics_layer);
+  weather_layer_destroy(s_weather_layer);
 }
 
 static void init(void) {

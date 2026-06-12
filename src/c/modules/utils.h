@@ -1,7 +1,7 @@
 #pragma once
 #include <pebble.h>
 
-#define CROAK(fmt, args...) { APP_LOG(APP_LOG_LEVEL_ERROR, fmt, ## args); }
+#define CROAK(fmt, ...) { APP_LOG(APP_LOG_LEVEL_ERROR, fmt, ## __VA_ARGS__); }
 
 typedef enum { FAIL, OK } Success;
 
@@ -22,3 +22,17 @@ uint32_t tuple_read_uint32_t_or_panic(Tuple *t);
 int8_t tuple_read_int8_t_or_panic(Tuple *t);
 int16_t tuple_read_int16_t_or_panic(Tuple *t);
 int32_t tuple_read_int32_t_or_panic(Tuple *t);
+
+typedef struct {
+  float x, y;
+} vec2;
+
+typedef struct {
+  uint32_t v;
+} Rng;
+
+Rng rng_new(uint32_t seed);
+
+uint32_t rng_next(Rng *rng);
+
+void generate_blue_noise(Rng *rng, size_t w, size_t h, vec2 buffer[w][h]);
