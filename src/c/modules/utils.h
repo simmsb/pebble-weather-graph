@@ -1,7 +1,24 @@
 #pragma once
 #include <pebble.h>
+#include <stdnoreturn.h>
 
-#define CROAK(fmt, ...) { APP_LOG(APP_LOG_LEVEL_ERROR, fmt, ## __VA_ARGS__); }
+#define xstr(a) str(a)
+#define str(a) #a
+
+#define CROAK(fmt, ...)                                                                            \
+  {                                                                                                \
+    APP_LOG(APP_LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__);                                              \
+    panic();                                                                                       \
+  }
+#define ASSERT(cond, fmt, ...)                                                                     \
+  {                                                                                                \
+    if (!(cond)) {                                                                                 \
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Assertion failed: " xstr(cond) ": " fmt, ##__VA_ARGS__);       \
+      panic();                                                                                     \
+    }                                                                                              \
+  }
+
+noreturn void panic();
 
 typedef enum { FAIL, OK } Success;
 
@@ -23,6 +40,11 @@ int8_t tuple_read_int8_t_or_panic(Tuple *t);
 int16_t tuple_read_int16_t_or_panic(Tuple *t);
 int32_t tuple_read_int32_t_or_panic(Tuple *t);
 
+void dict_reset(DictionaryIterator *iter);
+
+/* Like dict_read_next but returns the cursor as it was before moving  */
+Tuple *dict_take(DictionaryIterator *iter);
+
 typedef struct {
   float x, y;
 } vec2;
@@ -35,4 +57,6 @@ Rng rng_new(uint32_t seed);
 
 uint32_t rng_next(Rng *rng);
 
-void generate_blue_noise(Rng *rng, size_t w, size_t h, vec2 buffer[w][h]);
+int clamp(int a, int min, int max);
+
+#define MAX(a, b) ((a > b) ? a : b)

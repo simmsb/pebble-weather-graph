@@ -27,6 +27,8 @@ def configure(ctx):
 
 
 def build(ctx):
+    ctx.exec_command('npm run build')
+
     ctx.load('pebble_sdk')
 
     build_worker = os.path.exists('worker_src')
@@ -51,10 +53,10 @@ def build(ctx):
 
     ctx.set_group('bundle')
     ctx.pbl_bundle(binaries=binaries,
-                   js=ctx.path.ant_glob(['src/pkjs/**/*.js',
+                   js=ctx.path.ant_glob(['src/ts-build/**/*.js',
                                          'src/pkjs/**/*.json',
                                          'src/common/**/*.js']),
-                   js_entry_file='src/pkjs/index.js')
+                   js_entry_file='src/ts-build/index.js')
 
 orig_exec_command = Task.exec_command
 

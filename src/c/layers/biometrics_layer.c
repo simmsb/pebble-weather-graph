@@ -7,7 +7,7 @@
 
 static BiometricsLayer s_biometrics_layer;
 
-static void prv_update_proc(Layer *layer, GContext *ctx) {
+static void prv_update_biometrics_proc(Layer *layer, GContext *ctx) {
   BiometricsLayer *tl = *(BiometricsLayer **)layer_get_data(layer);
   GRect bounds        = layer_get_bounds(layer);
 
@@ -76,7 +76,7 @@ BiometricsLayer *biometrics_layer_create(GRect frame) {
 
   *(BiometricsLayer **)layer_get_data(tl->container) = tl;
 
-  layer_set_update_proc(tl->container, prv_update_proc);
+  layer_set_update_proc(tl->container, prv_update_biometrics_proc);
 
   return tl;
 }
@@ -95,7 +95,7 @@ Layer *biometrics_layer_get_layer(BiometricsLayer *layer) {
 
 void biometrics_layer_update(BiometricsLayer *layer, HealthEventType typ) {
 
-  snprintf(layer->hr_buf, sizeof(layer->hr_buf), "P %ld/", (long)87);
+  snprintf(layer->hr_buf, sizeof(layer->hr_buf), "H %ld / ", (long)87);
   text_layer_set_text(layer->hr_layer, layer->hr_buf);
   snprintf(layer->steps_buf, sizeof(layer->steps_buf), "S %ld", (long)1234);
   text_layer_set_text(layer->steps_layer, layer->steps_buf);

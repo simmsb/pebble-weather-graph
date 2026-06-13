@@ -42,7 +42,6 @@ static void prv_request_weather(void);
 
 static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   time_layer_update(s_time_layer, tick_time, settings_get());
-  weather_layer_update(s_weather_layer);
 
   if (units_changed & HOUR_UNIT) {
     prv_request_weather();
@@ -50,14 +49,13 @@ static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
-  DictionaryIterator orig = *iter;
   settings_apply_from_message(iter);
-  *iter = orig;
-  weather_update_from_message(iter);
-  *iter = orig;
   weather_update_seg_from_message(iter);
-  *iter = orig;
+  weather_update_hour_from_message(iter);
   weather_update_day_from_message(iter);
+  if (weather_update_from_message(iter) && s_weather_layer) {
+    weather_layer_update(s_weather_layer);
+  }
 }
 
 static void prv_inbox_dropped(AppMessageResult reason, void *context) {
@@ -70,10 +68,14 @@ static void prv_request_weather(void) {
   if (result == APP_MSG_OK) {
     dict_write_uint8(iter, MESSAGE_KEY_WEATHER_REQUEST, 1);
     app_message_outbox_send();
+  } else {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "outbox not ready");
   }
 }
 
-static void prv_battery_handler(BatteryChargeState state) { top_bar_layer_set_battery(s_top_bar_layer, state); }
+static void prv_battery_handler(BatteryChargeState state) {
+  top_bar_layer_set_battery(s_top_bar_layer, state);
+}
 
 static void prv_bt_handler(bool connected) { top_bar_layer_set_bt(s_top_bar_layer, connected); }
 
@@ -89,7 +91,7 @@ static void prv_window_load(Window *window) {
 
   APP_LOG(APP_LOG_LEVEL_INFO, "display top left: %d,%d", bounds.origin.x, bounds.origin.y);
 
-  int y = 0;
+  int y        = 0;
   s_time_layer = time_layer_create(GRect(0, TL_TIME_Y_TOP, w, TL_TIME_H));
   layer_add_child(root, time_layer_get_layer(s_time_layer));
   y += TL_TIME_Y_TOP + TL_TIME_H;
@@ -104,16 +106,14 @@ static void prv_window_load(Window *window) {
   y += TL_BIOMETRICS_H;
 
   y += TL_WEATHER_Y_PAD;
-  s_weather_layer = weather_layer_create((GRect(0, y, w, TL_WEATHER_HEIGHT)), weather_get());
+  s_weather_layer = weather_layer_create((GRect(0, y, w, bounds.size.h - y)), weather_get());
   layer_add_child(root, weather_layer_get_layer(s_weather_layer));
-  y += TL_WEATHER_HEIGHT;
 
   // Seed time display immediately
   time_t now_t   = time(NULL);
   struct tm *now = localtime(&now_t);
   if (now) {
     time_layer_update(s_time_layer, now, settings_get());
-    weather_layer_update(s_weather_layer);
   }
 }
 
@@ -146,7 +146,7 @@ static void init(void) {
   // AppMessage: register callbacks BEFORE opening
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
-  app_message_open(1536, 64);
+  app_message_open(512, 64);
 
   // Trigger initial weather fetch
   prv_request_weather();

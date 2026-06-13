@@ -5,7 +5,7 @@
 
 static TopBarLayer s_top_bar_layer;
 
-static void prv_update_proc(Layer *layer, GContext *ctx) {
+static void prv_update_top_bar_proc(Layer *layer, GContext *ctx) {
   TopBarLayer *tl = *(TopBarLayer **)layer_get_data(layer);
   GRect bounds    = layer_get_bounds(layer);
 
@@ -70,7 +70,7 @@ TopBarLayer *top_bar_layer_create(GRect frame) {
 
   *(TopBarLayer **)layer_get_data(tl->container) = tl;
 
-  layer_set_update_proc(tl->container, prv_update_proc);
+  layer_set_update_proc(tl->container, prv_update_top_bar_proc);
 
   return tl;
 }

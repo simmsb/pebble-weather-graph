@@ -10,15 +10,15 @@
 
 typedef struct {
   int8_t temperature;
-  uint8_t rain_chance;
-  uint8_t cloud_cover : 3;
+  // percentage
   uint8_t sun_level : 3;
   uint8_t is_day : 1;
-  uint8_t uv_index;
 } WeatherSegment;
 
 typedef struct {
   int8_t rain_amount;
+  uint8_t rain_chance;
+  uint8_t cloud_cover;
 } WeatherHourlySegment;
 
 typedef struct {
@@ -33,6 +33,7 @@ typedef struct {
   WeatherDaily daily[WEATHER_NUM_DAYS];
 
   time_t reportStart; // when this was fetched
+  int8_t currentTemperature;
   char locationName[WEATHER_CITY_MAX_LEN];
 } Weather;
 
@@ -40,5 +41,6 @@ void weather_init(void);
 Weather *weather_get(void);
 void weather_save(void);
 void weather_update_seg_from_message(DictionaryIterator *iter);
+void weather_update_hour_from_message(DictionaryIterator *iter);
 void weather_update_day_from_message(DictionaryIterator *iter);
-void weather_update_from_message(DictionaryIterator *iter);
+bool weather_update_from_message(DictionaryIterator *iter);
