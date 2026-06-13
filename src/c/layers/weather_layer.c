@@ -227,40 +227,27 @@ static void prv_update_proc_weather(Layer *layer, GContext *ctx) {
 //   }
 // }
 
-static int8_t gen_dither(int x, int y) {
+uint16_t rand_n_bits(int x, int y, uint8_t bits) {
   int o = 0;
-  for (;;) {
-    bool a = noise_get_at(y, x + o);
-    bool b = noise_get_at(y, x + o + 1);
 
-    if (a) {
-      if (b) {
-        o++;
-        continue;
-      } else {
-        return -1;
-      }
-    } else {
-      if (b) {
-        return 0;
-      } else {
-        return -1;
-      }
-    }
+  uint16_t random_value = 0;
+
+  for (int i = 0; i < bits; i++) {
+    random_value = (random_value << 1) | noise_get_at(y, x + o++);
   }
 
+  return random_value;
 }
 
 static GColor color_dithered(int x, int y, uint8_t shade) {
-  int8_t offset = gen_dither(x, y);
-  int8_t scaled_shade = ((uint16_t)shade * 3) / 256;
-  int8_t target = scaled_shade + offset;
+  int16_t offset = 64 - (int16_t)rand_n_bits(x, y, 7);
+  int16_t target = shade + offset;
 
-  // printf("x: %d, y: %d, scaled_shade %d, a %d, b %d, offset %d, target %d", x, y, scaled_shade, offset_a, offset_b, offset, target);
-
-  if (target >= 2) {
+  if (target >= 192) {
+    return GColorWhite;
+  } else if (target >= 128) {
     return GColorLightGray;
-  } else if (target >= 1) {
+  } else if (target >= 64) {
     return GColorDarkGray;
   } else {
     return GColorBlack;
@@ -316,6 +303,7 @@ static void prv_update_proc_weather_2(Layer *layer, GContext *ctx) {
 
   for (size_t x = 0; x < TL_WEATHER_WIDTH; x++) {
     size_t segment_idx = offset + (x * TL_WEATHER_SEGS_PER_PAGE) / TL_WEATHER_WIDTH;
+    size_t next_segment_idx = segment_idx + 1;
 
     WeatherSegment *slot = &weather->segments[segment_idx];
 
