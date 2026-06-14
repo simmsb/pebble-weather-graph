@@ -1,0 +1,42 @@
+cargo-features = ["panic-immediate-abort"]
+
+[package]
+name = "pebble-weather-graph"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+gravel.path = "./gravel/gravel"
+gravel-sys.path = "./gravel/gravel-sys"
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+heapless = { version = "0.9", default-features = false }
+static_cell = "2"
+once_cell = { version = "1.21.4", default-features = false, features = ["alloc", "race"] }
+paste = "1.0.15"
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+debug-assertions = true
+incremental = false
+lto = 'thin' # true/fat breaks defmt?
+opt-level = 's'
+overflow-checks = true
+# panic = 'unwind'
+# panic = 'immediate-abort'
+panic = 'abort'
+
+[profile.release]
+codegen-units = 1
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 'z'
+overflow-checks = true
+# panic = 'unwind'
+panic = 'immediate-abort'
+strip = true

@@ -191,7 +191,7 @@ async function fetchAndSend(lat: number, lon: number) {
     try {
         await sendToWatch(payload);
     } catch (e) {
-        console.log("Failed to send to watch: " + e);
+        console.log(e);
     }
 }
 

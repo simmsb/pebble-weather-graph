@@ -1,0 +1,6 @@
+[workspace]
+resolver = "3"
+members = ["gravel", "gravel-sys", "gravel-demo"]
+
+[patch.crates-io]
+gravel-sys.path = "./gravel-sys"

@@ -1,0 +1,32 @@
+{
+  "name": "gravel-demo",
+  "author": "The0x539",
+  "version": "0.0.1",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "gravel-demo",
+    "uuid": "b6a756ac-cdd2-4773-a2c4-4c4628d7d936",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "dummy"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}

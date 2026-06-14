@@ -1,0 +1,9 @@
+[package]
+name = "gravel-sys"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0"
+description = "Low-level bindings for the Pebble SDK"
+repository = "https://github.com/The0x539/gravel"
+
+[dependencies]

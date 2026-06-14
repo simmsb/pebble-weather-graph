@@ -3,4 +3,4 @@ dev:
   pebble build; \
   pebble install --emulator emery --logs -v --platform emery --pypkjs & EMULATOR_PID=$! ; \
   trap "kill $EMULATOR_PID 2>/dev/null" EXIT INT TERM; \
-  watchexec -p -i build -e c,h,ts,json "pebble build && pebble install"
+  watchexec -p -i build -e rs,c,h,ts,json "pebble build && pebble install"

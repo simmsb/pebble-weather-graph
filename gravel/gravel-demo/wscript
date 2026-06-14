@@ -1,0 +1,52 @@
+import os.path
+from waflib.TaskGen import extension, feature, before_method
+
+top = "."
+out = "build"
+
+
+@extension(".a")
+def add_artifact_file(self, node):
+    self.add_those_o_files(node)
+
+
+def options(ctx):
+    ctx.load("pebble_sdk")
+
+
+def configure(ctx):
+    ctx.load("pebble_sdk")
+
+
+def build(ctx):
+    ctx.load("pebble_sdk")
+
+    # ctx.set_group("bundle")
+    foo_target = "thumbv7m-pebble-eabi/release/libgravel_demo.a"
+    foo = ctx(
+        rule="cargo build --release --target ../thumbv7m-pebble-eabi.json -Zjson-target-spec --target-dir .",
+        source=["./Cargo.toml", "./.cargo/config.toml", "./thumbv7m-pebble-eabi.json"]
+        + ctx.path.ant_glob("src/**.rs"),
+        target=foo_target,
+    )
+
+    binaries = []
+
+    base_env = ctx.env
+
+    for platform in ctx.env.TARGET_PLATFORMS:
+        ctx.env = ctx.all_envs[platform]
+        # ctx.set_group(ctx.env.PLATFORM_NAME)
+        ctx.env.LINKFLAGS += ["-z", "noexecstack"]
+        ctx.env.LINKFLAGS += ["-Wl,--no-warn-rwx-segments"]  # ¯\_(ツ)_/¯
+
+        bar = ctx.pbl_program(
+            features="fake_obj",
+            source=[foo_target],
+            target=f"{ctx.env.BUILD_DIR}/pebble-app.elf",
+        )
+        binaries.append({"platform": platform, "app_elf": bar.target})
+
+    ctx.env = base_env
+    # ctx.set_group("bundle")
+    ctx.pbl_bundle(binaries=binaries)

@@ -1,8 +1,10 @@
 # pebble-weather-graph
 
-A Pebble watchapp/watchface written in C using the Pebble SDK.
+A Pebble watchface written in Rust using [Gravel](gravel/) bindings for the Pebble SDK.
 
 ## Building & running
+
+Requires nightly Rust (see `rust-toolchain.toml`) for `build-std`.
 
 ```sh
 pebble build                          # build for all targetPlatforms
@@ -20,12 +22,14 @@ basalt, chalk, diorite) are included by default for backwards compatibility.
 ## Project layout
 
 ```
-src/c/           C source for the watchapp
-src/pkjs/        PebbleKit JS (phone-side) source, if any
-worker_src/c/    Background worker source, if any
-resources/       Images, fonts, and other bundled resources
-package.json     Project metadata (UUID, platforms, resources, message keys)
-wscript          Build rules — usually no need to edit
+src/               Rust watchface source (staticlib entry in lib.rs)
+src/ts/            PebbleKit JS (phone-side) source
+src/generated/     Message key and resource ID bindings for the Pebble link step
+gravel/            Gravel Pebble SDK bindings (gravel + gravel-sys)
+resources/         Images, fonts, and other bundled resources
+package.json       Project metadata (UUID, platforms, resources, message keys)
+wscript            Build rules — cargo staticlib linked via pbl_program
+Cargo.toml         Rust crate manifest
 ```
 
 By default this project is configured as a watchapp. To make it a watchface,
