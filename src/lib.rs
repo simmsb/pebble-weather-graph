@@ -25,7 +25,6 @@ use gravel::prelude::*;
 use gravel::ui::window::{Window, WindowHandlers, WindowRef};
 use gravel::ui::window_stack;
 use gravel_sys::foundation::event::health::HealthEventType;
-use once_cell::race::{OnceBool, OnceBox};
 
 use crate::generated::message_keys;
 use crate::layers::*;
@@ -36,6 +35,12 @@ use crate::layout::{
 use crate::modules::settings::Settings;
 
 use self::modules::weather::Weather;
+
+pub mod messages {
+    #![allow(clippy::all)]
+    #![allow(nonstandard_style, unused, irrefutable_let_patterns)]
+    include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+}
 
 pub struct SingleCoreCell<T> {
     value: RefCell<T>,
@@ -131,7 +136,7 @@ impl WindowHandlers<()> for AppWindowHandlers {
         root.add_child(weather_layer.layer());
 
         let handlers = message::register(MsgHandler);
-        let _ = message::open(512, 64);
+        let _ = message::open(2500, 64);
 
         request_weather();
 
@@ -167,7 +172,7 @@ pub extern "C" fn handle_inbox_received(reader: &mut DictReader) {
         return;
     };
     app_state.settings.apply_from_message(reader);
-    if app_state.weather.update_from_messages(reader) {
+    if app_state.weather.update_from_message(reader) {
         app_state.weather_layer.update();
     }
 }

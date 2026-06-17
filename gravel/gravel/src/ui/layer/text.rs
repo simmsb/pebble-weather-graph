@@ -149,7 +149,14 @@ impl TextLayer {
     }
 
     pub fn text(&self) -> &CStr {
-        unsafe { CStr::from_ptr(sys::text_layer_get_text(self.inner)) }
+        unsafe {
+            let ptr = sys::text_layer_get_text(self.inner);
+            if ptr.is_null() {
+                c""
+            } else {
+                CStr::from_ptr(ptr)
+            }
+        }
     }
 
     pub fn set_system_font(&mut self, font: SystemFont) {

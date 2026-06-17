@@ -135,23 +135,8 @@ fn log_panic(info: &core::panic::PanicInfo<'_>) {
 }
 
 // extern, no_mangle so we can set a breakpoint
-// #[unsafe(no_mangle)]
-// extern "C" fn trigger_panic() -> ! {
-//     // loop {}
-//     core::process::abort_immediate();
-// }
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    // let mut msg = PanicMessageBuf {
-    //     buf: [0; 128],
-    //     len: 0,
-    // };
-    // let _ = msg.write_fmt(format_args!("{info}"));
-    // msg.buf[msg.len] = 0;
-
-    // log!(Error, "Panic");
-    log_panic(info);
+#[unsafe(no_mangle)]
+extern "C" fn trigger_panic() -> ! {
     unsafe {
         exit_reason_set(AppExitReason::NotSpecified);
         window_stack::pop_all(false);
@@ -203,4 +188,18 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         app_event_loop();
     };
     loop {}
+}
+
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    // let mut msg = PanicMessageBuf {
+    //     buf: [0; 128],
+    //     len: 0,
+    // };
+    // let _ = msg.write_fmt(format_args!("{info}"));
+    // msg.buf[msg.len] = 0;
+
+    // log!(Error, "Panic");
+    log_panic(info);
+    trigger_panic();
 }

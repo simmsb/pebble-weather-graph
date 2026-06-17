@@ -1,7 +1,8 @@
-import { fetchJSON } from "pkts/lib/fetch";
 import * as types from "./types";
 import { clayConfig } from "./config";
 import { sendAppMessage } from "pkts/lib/appMessage";
+import * as pb from "@bufbuild/protobuf";
+import * as messages_pb from "./gen/messages_pb";
 
 var WEATHER_BASE_URL = 'https://api.open-meteo.com/v1/forecast';
 var GEOCODE_BASE_URL = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode';
@@ -11,26 +12,30 @@ var CACHE_TTL_MS = 15 * 60 * 1000;  // 15 minutes
 // @ts-ignore
 const Clay = require("@rebble/clay");
 
-var clay = new Clay(clayConfig, null, { autoHandleEvents: false });
+const clay = new Clay(clayConfig, null, { autoHandleEvents: false });
 
 const originalLog = console.log;
 
-console.log = function (...args) {
-  const formattedArgs = args.map(arg => {
-    if (typeof arg === 'object' && arg !== null) {
-      try {
-        return JSON.stringify(arg, null, 2);
-      } catch (err) {
-        return '[Circular or Unstringifiable Object]';
-      }
-    }
-    return arg;
-  });
+const WEATHER_NUM_HOURS = 48;
+const WEATHER_NUM_DAYS = 2;
+const WEATHER_SEGS_PER_HOUR = 4;
+const WEATHER_NUM_SEGMENTS = WEATHER_NUM_HOURS * WEATHER_SEGS_PER_HOUR;
 
-  originalLog.apply(console, formattedArgs);
+console.log = function(...args) {
+    const formattedArgs = args.map(arg => {
+        if (typeof arg === 'object' && arg !== null) {
+            try {
+                return JSON.stringify(arg, null, 2);
+            } catch (err) {
+                return '[Circular or Unstringifiable Object]';
+            }
+        }
+        return arg;
+    });
+
+    originalLog.apply(console, formattedArgs);
 };
-
-function readCache(): { expiresAt: number, payload: Payload } | null {
+function readCache(): { expiresAt: number, payload: messages_pb.Weather } | null {
     try {
         var raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
@@ -42,7 +47,7 @@ function readCache(): { expiresAt: number, payload: Payload } | null {
     }
 }
 
-function writeCache(payload: Payload) {
+function writeCache(payload: messages_pb.Weather) {
     try {
         localStorage.setItem(CACHE_KEY, JSON.stringify({
             expiresAt: Date.now() + CACHE_TTL_MS,
@@ -51,47 +56,26 @@ function writeCache(payload: Payload) {
     } catch (e) { }
 }
 
-async function sendToWatch(payload: Payload) {
+async function sendToWatch(payload: messages_pb.Weather) {
     console.log("Sending payload to watch");
-    const dict = {
-        'WEATHER_REPORT_START': payload.fetch_time,
-        'WEATHER_LOCATION_NAME': payload.city_name,
-        'WEATHER_CURRENT_TEMP': payload.current_temp,
-    };
 
-    await sendAppMessage(dict);
+    try {
+        const bytes = pb.toBinary(messages_pb.WeatherSchema, payload)
+        // const asJson = pb.toJsonString(messages_pb.WeatherSchema, payload);
+        // console.log(asJson);
+        console.log(`Sending ${bytes.length} bytes`);
 
-    for (let i = 0; i < payload.daily.length; i++) {
-        const daily_dict = {
-            "WEATHER_DAY_UPDATE_IDX": i,
-            "WEATHER_DAY_TEMP_HIGH": payload.daily[i].temp_high,
-            "WEATHER_DAY_TEMP_LOW": payload.daily[i].temp_low,
-            "WEATHER_DAY_NAME": payload.daily[i].day,
+        await sendAppMessage({
+            "WEATHER_UPDATE": Array.from(bytes)
+        });
+    } catch (e) {
+        let msg;
+        if (e instanceof Error) {
+            msg = `${e.name}: ${e.message}`;
+        } else {
+            msg = JSON.stringify(e)
         }
-
-        await sendAppMessage(daily_dict);
-    }
-
-    for (let i = 0; i < payload.hourly.length; i++) {
-        const hourly_dict = {
-            "WEATHER_HOUR_UPDATE_IDX": i,
-            "WEATHER_HOUR_RAIN_AMOUNT": payload.hourly[i].rain_amount,
-            "WEATHER_HOUR_RAIN_CHANCE": payload.hourly[i].rain_chance,
-            "WEATHER_HOUR_CLOUD_COVER": payload.hourly[i].cloud_cover,
-        }
-
-        await sendAppMessage(hourly_dict);
-    }
-
-    for (let i = 0; i < payload.segment.length; i++) {
-        const seg_dict = {
-            "WEATHER_SEG_UPDATE_IDX": i,
-            "WEATHER_SEG_TEMPERATURE": payload.segment[i].temperature,
-            "WEATHER_SEG_SUN_LEVEL": payload.segment[i].sunshine_level,
-            "WEATHER_SEG_IS_DAY": payload.segment[i].is_day,
-        }
-
-        await sendAppMessage(seg_dict);
+        console.log(`SendToWatch failed: ${msg}`);
     }
 }
 
@@ -108,27 +92,6 @@ function transpose<K extends keyof any, T>(o: Record<K, T[]>): Record<K, T>[] {
     });
 }
 
-type Payload = {
-    current_temp: number;
-    daily: {
-        temp_high: number;
-        temp_low: number;
-        day: number;
-    }[];
-    hourly: {
-        rain_amount: number;
-        rain_chance: number;
-        cloud_cover: number;
-    }[];
-    segment: {
-        temperature: number;
-        sunshine_level: number;
-        is_day: number;
-    }[];
-    fetch_time: number;
-    city_name: string;
-};
-
 async function fetchAndSend(lat: number, lon: number) {
     var weatherUrl = WEATHER_BASE_URL +
         '?latitude=' + lat +
@@ -139,7 +102,7 @@ async function fetchAndSend(lat: number, lon: number) {
         '&daily=apparent_temperature_max,apparent_temperature_min' +
         '&forecast_days=3' +
         '&timeformat=unixtime' +
-        '&timezone=auto';
+        '&timezone=UTC';
     const weatherPromise = fetch(weatherUrl);
 
     const geocodeUrl = GEOCODE_BASE_URL + '?f=json&langCode=EN&location=' + lon + ',' + lat;
@@ -152,47 +115,43 @@ async function fetchAndSend(lat: number, lon: number) {
     var dly = wr.daily;
     var minutely_15 = wr.minutely_15;
 
-    const current_temp = cur.apparent_temperature;
+    const currentTemperature = Math.round(cur.apparent_temperature);
 
-    const daily = transpose(dly).map(x => ({
-        temp_high: x.apparent_temperature_max,
-        temp_low: x.apparent_temperature_min,
+    const daily: messages_pb.WeatherDaily[] = transpose(dly).slice(0, WEATHER_NUM_DAYS).map(x => pb.create(messages_pb.WeatherDailySchema, {
+        tempHigh: Math.round(x.apparent_temperature_max),
+        tempLow: Math.round(x.apparent_temperature_min),
         day: (new Date(x.time * 1000)).getDay(),
     }));
 
-    const hourly = transpose(hrly).map(x => ({
-        rain_amount: x.precipitation,
-        rain_chance: x.precipitation_probability,
-        cloud_cover: 7.0 * (x.cloud_cover / 100.0),
+    const hourlySegments: messages_pb.WeatherHourly[] = transpose(hrly).slice(0, WEATHER_NUM_HOURS).map(x => pb.create(messages_pb.WeatherHourlySchema, {
+        rainAmount: Math.round(x.precipitation),
+        rainChance: x.precipitation_probability,
+        cloudCover: Math.round(7.0 * (x.cloud_cover / 100.0)),
     }));
 
-    const segment = transpose(minutely_15).map(x => ({
-        temperature: x.apparent_temperature,
-        sunshine_level: 7.0 * (x.sunshine_duration / 900.0),
-        is_day: x.is_day,
+    const segments: messages_pb.WeatherSegment[] = transpose(minutely_15).slice(0, WEATHER_NUM_SEGMENTS).map(x => pb.create(messages_pb.WeatherSegmentSchema, {
+        temperature: Math.round(x.apparent_temperature),
+        sunLevel: Math.round(7.0 * (x.sunshine_duration / 900.0)),
+        isDay: !!x.is_day,
     }));
 
-    const fetch_time = Math.floor(Date.now() / 1000);
+    const reportStart = wr.minutely_15.time[0];
 
     const gr: types.GeocodeResponse = await (await geocodePromise).json();
     var addr = gr && gr.address;
-    const city_name = (addr && (addr.City || addr.ShortLabel)) || 'Unknown';
+    const locationName = (addr && (addr.City || addr.ShortLabel)) || 'Unknown';
 
-    const payload = {
-        current_temp,
+    const payload: messages_pb.Weather = pb.create(messages_pb.WeatherSchema, {
+        currentTemperature,
         daily,
-        hourly,
-        segment,
-        fetch_time,
-        city_name
-    };
+        hourlySegments,
+        segments,
+        reportStart,
+        locationName
+    });
 
     writeCache(payload);
-    try {
-        await sendToWatch(payload);
-    } catch (e) {
-        console.log(e);
-    }
+    await sendToWatch(payload);
 }
 
 /**

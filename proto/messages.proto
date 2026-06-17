@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+message WeatherSegment {
+  sint32 temperature = 1;
+  uint32 sun_level   = 2;
+  bool   is_day      = 3;
+}
+
+message WeatherHourly {
+  uint32 rain_amount = 1;
+  uint32 rain_chance = 2;
+  uint32 cloud_cover = 3;
+}
+
+message WeatherDaily {
+  sint32 temp_high = 1;
+  sint32 temp_low  = 2;
+  uint32 day       = 3;
+}
+
+message Weather {
+  uint32 report_start = 1;
+  sint32 current_temperature = 2;
+  string location_name = 3;
+  repeated WeatherSegment segments = 4;
+  repeated WeatherHourly hourly_segments = 5;
+  repeated WeatherDaily daily = 6;
+}

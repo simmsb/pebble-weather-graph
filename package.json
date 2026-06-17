@@ -2,13 +2,18 @@
   "name": "pebble-weather-graph",
   "author": "simmsb",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
   "dependencies": {
+    "@bufbuild/protobuf": "^2.12.0",
     "@rebble/clay": "^1.0.10",
     "pebble-fctx": "^1.6.1"
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1.71.0",
+    "@bufbuild/protoc-gen-es": "^2.12.0",
     "pkts": "^0.3.0-beta.1"
   },
   "scripts": {
@@ -27,21 +32,7 @@
     },
     "messageKeys": [
       "WEATHER_REQUEST",
-      "WEATHER_SEG_UPDATE_IDX",
-      "WEATHER_SEG_TEMPERATURE",
-      "WEATHER_SEG_SUN_LEVEL",
-      "WEATHER_SEG_IS_DAY",
-      "WEATHER_HOUR_UPDATE_IDX",
-      "WEATHER_HOUR_RAIN_AMOUNT",
-      "WEATHER_HOUR_RAIN_CHANCE",
-      "WEATHER_HOUR_CLOUD_COVER",
-      "WEATHER_DAY_UPDATE_IDX",
-      "WEATHER_DAY_TEMP_HIGH",
-      "WEATHER_DAY_TEMP_LOW",
-      "WEATHER_DAY_NAME",
-      "WEATHER_REPORT_START",
-      "WEATHER_LOCATION_NAME",
-      "WEATHER_CURRENT_TEMP",
+      "WEATHER_UPDATE",
       "SETTING_ACCENT_COLOR"
     ],
     "resources": {

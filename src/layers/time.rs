@@ -1,5 +1,3 @@
-use chrono::NaiveDateTime;
-
 use gravel::graphics::types::GRect;
 use gravel::graphics::{BLACK, CLEAR};
 use gravel::prelude::*;
@@ -9,7 +7,7 @@ use heapless::CString;
 use crate::format_cstr;
 use crate::generated::resource_ids;
 use crate::layout::TL_TIME_H;
-use crate::modules::clock::{local_now, naive_from_pebble_tm};
+use crate::modules::clock::{local_now, timestamp_from_pebble_tm};
 use crate::modules::settings::Settings;
 use gravel_sys::std_c::time::tm;
 
@@ -39,7 +37,11 @@ impl TimeLayer {
 
         let mut time_buf = CString::<8, u8>::new();
         let tick_time = local_now();
-        time_label.set_text(format_cstr!(&mut time_buf, "{}", tick_time.format("%H:%M")));
+        time_label.set_text(format_cstr!(
+            &mut time_buf,
+            "{}",
+            tick_time.strftime("%H:%M")
+        ));
 
         container.add_child(&time_label.layer());
 
@@ -54,17 +56,17 @@ impl TimeLayer {
         &self.container
     }
 
-    pub fn update(&mut self, tick_time: NaiveDateTime) {
+    pub fn update(&mut self, tick_time: jiff::civil::DateTime) {
         self.time_label.set_text(format_cstr!(
             &mut self.time_buf,
             "{}",
-            tick_time.format("%H:%M")
+            tick_time.strftime("%H:%M")
         ));
         self.container.mark_dirty();
     }
 
     pub fn update_from_tm(&mut self, tick_time: &tm) {
-        self.update(naive_from_pebble_tm(tick_time));
+        self.update(timestamp_from_pebble_tm(tick_time));
     }
 
     pub fn update_now(&mut self) {
