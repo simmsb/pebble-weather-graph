@@ -6,7 +6,7 @@ import * as messages_pb from "./gen/messages_pb";
 
 var WEATHER_BASE_URL = 'https://api.open-meteo.com/v1/forecast';
 var GEOCODE_BASE_URL = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode';
-var CACHE_KEY = 'carbon.weather.v3';
+var CACHE_KEY = 'carbon.weather.v4';
 var CACHE_TTL_MS = 15 * 60 * 1000;  // 15 minutes
 
 // @ts-ignore
@@ -20,6 +20,38 @@ const WEATHER_NUM_HOURS = 48;
 const WEATHER_NUM_DAYS = 2;
 const WEATHER_SEGS_PER_HOUR = 4;
 const WEATHER_NUM_SEGMENTS = WEATHER_NUM_HOURS * WEATHER_SEGS_PER_HOUR;
+
+const FIFTEEN_MIN_SEC = 15 * 60;
+const ONE_HOUR_SEC = 60 * 60;
+const ONE_DAY_SEC = 24 * 60 * 60;
+
+/** Floor to 15-minute boundary, matching the watch's utc_now rounding. */
+function roundedNowSec(): number {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return nowSec - (nowSec % FIFTEEN_MIN_SEC);
+}
+
+function findFirstAtOrAfter(times: number[], t: number): number {
+    const idx = times.findIndex(time => time >= t);
+    return idx === -1 ? times.length : idx;
+}
+
+/** Index of the interval containing t; intervals are [times[i], times[i+1]) or [times[i], times[i] + intervalSec). */
+function findContainingIntervalIndex(times: number[], t: number, intervalSec: number): number {
+    for (let i = 0; i < times.length; i++) {
+        const end = i + 1 < times.length ? times[i + 1] : times[i] + intervalSec;
+        if (times[i] <= t && t < end) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+interface WeatherCache {
+    expiresAt: number;
+    weather: types.MeteoResponse;
+    locationName: string;
+}
 
 console.log = function(...args) {
     const formattedArgs = args.map(arg => {
@@ -35,25 +67,74 @@ console.log = function(...args) {
 
     originalLog.apply(console, formattedArgs);
 };
-function readCache(): { expiresAt: number, payload: messages_pb.Weather } | null {
+function readCache(): WeatherCache | null {
     try {
         var raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
         var obj = JSON.parse(raw);
-        if (!obj || !obj.payload || !obj.expiresAt) return null;
+        if (!obj || !obj.weather || !obj.expiresAt || !obj.locationName) return null;
         return obj;
     } catch (e) {
         return null;
     }
 }
 
-function writeCache(payload: messages_pb.Weather) {
+function writeCache(weather: types.MeteoResponse, locationName: string) {
     try {
         localStorage.setItem(CACHE_KEY, JSON.stringify({
             expiresAt: Date.now() + CACHE_TTL_MS,
-            payload: payload
+            weather,
+            locationName,
         }));
     } catch (e) { }
+}
+
+function buildPayload(weather: types.MeteoResponse, locationName: string): messages_pb.Weather | null {
+    const cur = weather.current;
+    const hrly = weather.hourly;
+    const dly = weather.daily;
+    const minutely_15 = weather.minutely_15;
+
+    const now = roundedNowSec();
+    const minutelyRows = transpose(minutely_15);
+    const hourlyRows = transpose(hrly);
+    const dailyRows = transpose(dly);
+
+    const startSegIdx = findFirstAtOrAfter(minutelyRows.map(r => r.time), now);
+    if (startSegIdx >= minutelyRows.length) {
+        return null;
+    }
+
+    const reportStart = minutelyRows[startSegIdx].time;
+    const startHourIdx = findContainingIntervalIndex(hrly.time, reportStart, ONE_HOUR_SEC);
+    const startDayIdx = findContainingIntervalIndex(dly.time, reportStart, ONE_DAY_SEC);
+
+    const daily: messages_pb.WeatherDaily[] = dailyRows.slice(startDayIdx, startDayIdx + WEATHER_NUM_DAYS).map(x => pb.create(messages_pb.WeatherDailySchema, {
+        tempHigh: Math.round(x.apparent_temperature_max),
+        tempLow: Math.round(x.apparent_temperature_min),
+        day: (new Date(x.time * 1000)).getDay(),
+    }));
+
+    const hourlySegments: messages_pb.WeatherHourly[] = hourlyRows.slice(startHourIdx, startHourIdx + WEATHER_NUM_HOURS).map(x => pb.create(messages_pb.WeatherHourlySchema, {
+        rainAmount: Math.round(x.precipitation),
+        rainChance: x.precipitation_probability,
+        cloudCover: Math.round(7.0 * (x.cloud_cover / 100.0)),
+    }));
+
+    const segments: messages_pb.WeatherSegment[] = minutelyRows.slice(startSegIdx, startSegIdx + WEATHER_NUM_SEGMENTS).map(x => pb.create(messages_pb.WeatherSegmentSchema, {
+        temperature: Math.round(x.apparent_temperature),
+        sunLevel: Math.round(7.0 * (x.sunshine_duration / 900.0)),
+        isDay: !!x.is_day,
+    }));
+
+    return pb.create(messages_pb.WeatherSchema, {
+        currentTemperature: Math.round(cur.apparent_temperature),
+        daily,
+        hourlySegments,
+        segments,
+        reportStart,
+        locationName,
+    });
 }
 
 async function sendToWatch(payload: messages_pb.Weather) {
@@ -110,47 +191,21 @@ async function fetchAndSend(lat: number, lon: number) {
 
 
     const wr: types.MeteoResponse = await (await weatherPromise).json();
-    var cur = wr.current;
-    var hrly = wr.hourly;
-    var dly = wr.daily;
-    var minutely_15 = wr.minutely_15;
-
-    const currentTemperature = Math.round(cur.apparent_temperature);
-
-    const daily: messages_pb.WeatherDaily[] = transpose(dly).slice(0, WEATHER_NUM_DAYS).map(x => pb.create(messages_pb.WeatherDailySchema, {
-        tempHigh: Math.round(x.apparent_temperature_max),
-        tempLow: Math.round(x.apparent_temperature_min),
-        day: (new Date(x.time * 1000)).getDay(),
-    }));
-
-    const hourlySegments: messages_pb.WeatherHourly[] = transpose(hrly).slice(0, WEATHER_NUM_HOURS).map(x => pb.create(messages_pb.WeatherHourlySchema, {
-        rainAmount: Math.round(x.precipitation),
-        rainChance: x.precipitation_probability,
-        cloudCover: Math.round(7.0 * (x.cloud_cover / 100.0)),
-    }));
-
-    const segments: messages_pb.WeatherSegment[] = transpose(minutely_15).slice(0, WEATHER_NUM_SEGMENTS).map(x => pb.create(messages_pb.WeatherSegmentSchema, {
-        temperature: Math.round(x.apparent_temperature),
-        sunLevel: Math.round(7.0 * (x.sunshine_duration / 900.0)),
-        isDay: !!x.is_day,
-    }));
-
-    const reportStart = wr.minutely_15.time[0];
 
     const gr: types.GeocodeResponse = await (await geocodePromise).json();
     var addr = gr && gr.address;
     const locationName = (addr && (addr.City || addr.ShortLabel)) || 'Unknown';
 
-    const payload: messages_pb.Weather = pb.create(messages_pb.WeatherSchema, {
-        currentTemperature,
-        daily,
-        hourlySegments,
-        segments,
-        reportStart,
-        locationName
-    });
+    writeCache(wr, locationName);
+    await buildAndSend(wr, locationName);
+}
 
-    writeCache(payload);
+async function buildAndSend(weather: types.MeteoResponse, locationName: string) {
+    const payload = buildPayload(weather, locationName);
+    if (!payload) {
+        console.log("No future weather data to send");
+        return;
+    }
     await sendToWatch(payload);
 }
 
@@ -163,8 +218,7 @@ async function getWeather() {
     var cache = readCache();
     if (cache && cache.expiresAt > Date.now()) {
         console.log('Carbon: using cached weather');
-        // Re-evaluate unit in case locale changed; re-fetch if unit differs
-        await sendToWatch(cache.payload);
+        await buildAndSend(cache.weather, cache.locationName);
         return;
     }
 

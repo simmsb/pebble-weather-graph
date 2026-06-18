@@ -92,9 +92,10 @@ impl Weather {
             let mut decoder = PbDecoder::new(buf);
             decoder.ignore_repeated_cap_err = true;
             if let Err(e) = self.data.decode(&mut decoder, buf.len()) {
-                // crate::error!("Decode error: {:?}", e);
+                crate::error!("Decode error: {:?}", e);
             }
 
+            self.location_name = CString::new();
             let _ = ufmt::uwrite!(&mut self.location_name, "{}", self.data.location_name);
 
             self.save();

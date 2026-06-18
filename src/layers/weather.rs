@@ -428,12 +428,12 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
         weather_data.report_start
     );
 
-    // crate::debug!(
-    //     "Weather data sizes: segs: {}, hours: {}, days: {}",
-    //     weather_data.segments.len(),
-    //     weather_data.hourly_segments.len(),
-    //     weather_data.daily.len(),
-    // );
+    crate::debug!(
+        "Weather data sizes: segs: {}, hours: {}, days: {}",
+        weather_data.segments.len(),
+        weather_data.hourly_segments.len(),
+        weather_data.daily.len(),
+    );
 
     let mut drawn_midnight = false;
 
@@ -461,7 +461,6 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
         if segment_idx >= weather_data.segments.len()
             || hourly_segment_idx >= weather_data.hourly_segments.len()
         {
-            // crate::debug!("Skipping seg {} with idx {}, hourly: {}", x, segment_idx, hourly_segment_idx);
             continue;
         }
 

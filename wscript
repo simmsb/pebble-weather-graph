@@ -4,6 +4,7 @@
 # Feel free to customize this to your needs.
 #
 import os.path
+import os
 
 from waflib import Errors
 from waflib.Task import Task
@@ -88,9 +89,10 @@ def build(ctx):
         + ctx.path.ant_glob('gravel/gravel/src/**/*.rs')
         + ctx.path.ant_glob('gravel/gravel-sys/src/**/*.rs')
     )
+    cargo_args = os.environ.get("EXTRA_CARGO_ARGS", "")
     rust_target = RUST_TARGET
     ctx(
-        rule='cargo build --release --target ../thumbv7m-pebble-eabi.json -Zjson-target-spec --target-dir .',
+        rule=f'cargo build --release --target ../thumbv7m-pebble-eabi.json -Zjson-target-spec --target-dir . {cargo_args}',
         source=rust_sources + [message_keys_lib],
         target=rust_target,
         always=True,

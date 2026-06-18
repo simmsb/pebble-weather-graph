@@ -44,3 +44,7 @@ strip = true
 
 [build-dependencies]
 micropb-gen = "0.6.0"
+
+[features]
+default = ["logging"]
+logging = []
