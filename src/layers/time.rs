@@ -4,65 +4,56 @@ use gravel::prelude::*;
 use gravel::ui::layer::{Layer, TextAlignment, TextLayer};
 use heapless::CString;
 
-use crate::format_cstr;
-use crate::generated::resource_ids;
 use crate::layout::TL_TIME_H;
-use crate::modules::clock::{local_now, timestamp_from_pebble_tm};
-use crate::modules::settings::Settings;
+use crate::modules::clock::{Datetime, local_now, timestamp_from_pebble_tm};
+use crate::{generated::resource_ids, ufmt_cstr};
 use gravel_sys::std_c::time::tm;
 
+#[pin_init::pin_data]
+pub struct TimeData {
+    #[pin]
+    time_label: TextLayer<12>,
+}
+
 pub struct TimeLayer {
-    container: Layer<()>,
-    time_label: TextLayer,
-    time_buf: CString<8, u8>,
+    container: Layer<TimeData>,
 }
 
 impl TimeLayer {
     pub fn new(frame: GRect) -> Self {
-        let container = Layer::new(frame);
         let w = frame.size.x;
 
         let resource =
             gravel::foundation::resources::get_handle(resource_ids::RESOURCE_ID_LM_MONO_48);
-        let time_label = TextLayer::builder(GRect {
+        let mut time_label = TextLayer::new(GRect {
             origin: Default::default(),
             size: gravel::graphics::types::GSize { x: w, y: TL_TIME_H },
         })
-        .custom_font(resource)
-        .background_color(CLEAR)
-        .text_color(BLACK)
-        .alignment(TextAlignment::Center)
-        .build()
-        .expect("text layer");
+        .unwrap();
 
-        let mut time_buf = CString::<8, u8>::new();
-        let tick_time = local_now();
-        time_label.set_text(format_cstr!(
-            &mut time_buf,
-            "{}",
-            tick_time.strftime("%H:%M")
-        ));
+        time_label
+            .set_custom_font(resource)
+            .set_background_color(CLEAR)
+            .set_text_color(BLACK)
+            .set_alignment(TextAlignment::Center);
 
-        container.add_child(&time_label.layer());
+        let container = Layer::new_with_data(frame, TimeData { time_label });
 
-        Self {
-            container,
-            time_label,
-            time_buf: CString::new(),
-        }
+        container.add_child(&container.user_data().time_label.layer());
+
+        Self { container }
     }
 
-    pub fn layer(&self) -> &Layer<()> {
+    pub fn layer(&self) -> &Layer<TimeData> {
         &self.container
     }
 
-    pub fn update(&mut self, tick_time: jiff::civil::DateTime) {
-        self.time_label.set_text(format_cstr!(
-            &mut self.time_buf,
-            "{}",
-            tick_time.strftime("%H:%M")
-        ));
-        self.container.mark_dirty();
+    pub fn update(&mut self, tick_time: Datetime) {
+        let data = unsafe { self.container.user_data_mut() };
+
+        data.project().time_label.update_text(|s| {
+            ufmt_cstr!(s, "{}:{}", tick_time.hour, tick_time.min);
+        });
     }
 
     pub fn update_from_tm(&mut self, tick_time: &tm) {

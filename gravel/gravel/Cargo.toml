@@ -8,3 +8,6 @@ repository = "https://github.com/The0x539/gravel"
 
 [dependencies]
 gravel-sys = { path = "../gravel-sys" }
+heapless = "0.9.3"
+pin-init = { git = "https://github.com/Rust-for-Linux/pin-init", version = "0.3.0", default-features = false }
+pin-project = "1.1.13"

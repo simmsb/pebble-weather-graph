@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, mem::MaybeUninit, pin::Pin};
 
 use gravel_sys::{graphics::types::GRect, ui::layer as sys};
 
@@ -12,7 +12,8 @@ mod text;
 // pub mod status_bar;
 // pub mod text;
 
-pub use text::{TextAlignment, TextLayer, TextLayerBuilder, TextLayerRef};
+use pin_init::{InPlaceWrite, PinInit};
+pub use text::{TextAlignment, TextLayer};
 
 pub use bitmap::BitmapLayer;
 
@@ -43,6 +44,17 @@ impl<T> Layer<T> {
             Self::from_raw(inner)
         }
     }
+
+    pub fn new_with_pinned_data(frame: GRect, init: impl PinInit<T>) -> Self {
+        unsafe {
+            let inner = sys::layer_create_with_data(frame, core::mem::size_of::<T>());
+            let ptr = sys::layer_get_data(inner).cast::<T>();
+
+            init.__pinned_init(ptr).unwrap();
+
+            Self::from_raw(inner)
+        }
+    }
 }
 
 impl<T> Drop for Layer<T> {
@@ -68,7 +80,7 @@ pub struct LayerRef<T> {
 }
 
 impl<T> LayerRef<T> {
-    pub(crate) unsafe fn from_raw(inner: *mut sys::Layer) -> Self {
+    pub unsafe fn from_raw(inner: *mut sys::Layer) -> Self {
         Self {
             inner,
             marker: PhantomData,
@@ -118,8 +130,14 @@ pub trait LayerHandle<T>: sealed::AsRawLayer {
     }
 
     /// SAFETY: There's no way to verify that this is the only handle referencing this layer.
-    unsafe fn user_data_mut(&mut self) -> &mut T {
-        unsafe { &mut *sys::layer_get_data(self.as_raw()).cast::<T>() }
+    unsafe fn user_data_mut(&mut self) -> Pin<&mut T> {
+        unsafe {
+            Pin::new_unchecked(
+                sys::layer_get_data(self.as_raw())
+                    .cast::<T>()
+                    .as_mut_unchecked(),
+            )
+        }
     }
 
     fn add_child<U>(&self, child: &impl LayerHandle<U>) {

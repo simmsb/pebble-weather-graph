@@ -33,7 +33,7 @@ use self::{
     graphics::{BABY_BLUE_EYES, BLACK, GREEN, SystemFont, WHITE},
     prelude::{LayerHandle, WindowHandle as _},
     ui::{
-        layer::{TextLayer, TextLayerBuilder},
+        layer::TextLayer,
         window::Window,
         window_stack,
     },

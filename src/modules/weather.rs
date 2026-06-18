@@ -5,30 +5,8 @@ use micropb::{MessageDecode, PbDecoder};
 
 use crate::generated::message_keys;
 
-// fn value_as_i32(value: DictValue<'_>) -> Option<i32> {
-//     match value {
-//         DictValue::I32(v) => Some(v),
-//         DictValue::I8(v) => Some(v as i32),
-//         DictValue::U8(v) => Some(v as i32),
-//         DictValue::U32(v) => Some(v as i32),
-//         _ => None,
-//     }
-// }
-
-// fn copy_cstring<const N: usize>(value: DictValue<'_>, dest: &mut CString<N>) -> bool {
-//     if let DictValue::CString(s) = value {
-//         *dest = CString::from_bytes_truncating_at_nul(s.to_bytes_with_nul())
-//             .unwrap_or_else(|_| CString::new());
-//         true
-//     } else {
-//         false
-//     }
-// }
-
-pub const WEATHER_NUM_HOURS: usize = 48;
 pub const WEATHER_NUM_DAYS: usize = 2;
 pub const TL_WEATHER_SEGS_PER_HOUR: usize = 4;
-pub const WEATHER_NUM_SEGMENTS: usize = WEATHER_NUM_HOURS * TL_WEATHER_SEGS_PER_HOUR;
 pub const WEATHER_CITY_MAX_LEN: usize = 32;
 
 const STORAGE_KEY_WEATHER: u32 = 1;

@@ -1,4 +1,4 @@
-use core::ffi::CStr;
+use core::{ffi::CStr, time::Duration};
 
 use gravel::graphics::draw::{self, Context};
 use gravel::graphics::types::{GPoint, GRect};
@@ -12,26 +12,28 @@ use gravel_sys::graphics::fonts::FONT_KEY_GOTHIC_14;
 use gravel_sys::graphics::gdraw::{GTextAlignment, GTextOverflowMode};
 use gravel_sys::ui::layer::{Layer as SysLayer, LayerUpdateProc};
 use heapless::CString;
-use jiff::ToSpan as _;
 
-use crate::modules::weather::{
-    TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, WEATHER_NUM_DAYS, Weather,
-};
-use crate::{APP_STATE, format_cstr};
+use crate::APP_STATE;
 use crate::{
     messages::{WeatherDaily, WeatherHourly, WeatherSegment},
     modules::clock::{local_now, utc_now},
 };
+use crate::{
+    modules::{
+        clock::{Datetime, Timestamp},
+        weather::{TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, WEATHER_NUM_DAYS, Weather},
+    },
+    ufmt_cstr,
+};
 
 pub const TL_WEATHER_HOURS_PER_PAGE: usize = 36;
 pub const TL_WEATHER_SEGS_PER_PAGE: usize = TL_WEATHER_HOURS_PER_PAGE * TL_WEATHER_SEGS_PER_HOUR;
-pub const TL_WEATHER_HOURLY_SEGS_PER_PAGE: usize = TL_WEATHER_HOURS_PER_PAGE;
 pub const TL_WEATHER_CURRENT_HEIGHT: i16 = 20;
 pub const TL_WEATHER_TEMP_BOTTOM_PAD: i16 = 22 + TL_WEATHER_CURRENT_HEIGHT;
 pub const TL_WEATHER_WIDTH: usize = 200;
 
 const MIN_TEMP: i8 = -10;
-const MAX_TEMP: i8 = 35;
+const MAX_TEMP: i8 = 45;
 const SUN_LEVEL_MIN_TO_SHOW: u8 = 3;
 const RAIN_CHANCE_MIN_TO_SHOW: u8 = 30;
 
@@ -217,7 +219,7 @@ fn interpolate_hourly(a: &WeatherHourly, b: &WeatherHourly, weight: i32) -> Weat
     }
 }
 
-fn day_name(day: u8) -> &'static str {
+fn day_name_short(day: u8) -> &'static str {
     match day {
         0 | 7 => "SU",
         1 => "MO",
@@ -226,6 +228,37 @@ fn day_name(day: u8) -> &'static str {
         4 => "TH",
         5 => "FR",
         6 => "SA",
+        _ => "UNK",
+    }
+}
+
+fn day_name(day: u8) -> &'static str {
+    match day {
+        0 | 7 => "Sun",
+        1 => "Mon",
+        2 => "Tue",
+        3 => "Wed",
+        4 => "Thu",
+        5 => "Fri",
+        6 => "Sat ",
+        _ => "UNK",
+    }
+}
+
+fn month_name(day: u8) -> &'static str {
+    match day {
+        0 => "Jan",
+        1 => "Feb",
+        2 => "Mar",
+        3 => "Apr",
+        4 => "May",
+        5 => "Jun",
+        6 => "Jul",
+        7 => "Aug",
+        8 => "Sep",
+        9 => "Oct",
+        10 => "Nov",
+        11 => "Dec",
         _ => "UNK",
     }
 }
@@ -278,10 +311,10 @@ fn draw_midnight_marker_and_dates(
 
     ctx.set_text_color(BLACK);
     ctx.draw_text(
-        format_cstr!(
+        ufmt_cstr!(
             &mut buf,
             "{} {}/{}°",
-            day_name(day_left.day),
+            day_name_short(day_left.day),
             day_left.temp_low,
             day_left.temp_high
         ),
@@ -294,10 +327,10 @@ fn draw_midnight_marker_and_dates(
         GTextAlignment::Right,
     );
     ctx.draw_text(
-        format_cstr!(
+        ufmt_cstr!(
             &mut buf,
             "{} {}/{}°",
-            day_name(day_right.day),
+            day_name_short(day_right.day),
             day_right.temp_low,
             day_right.temp_high
         ),
@@ -339,7 +372,7 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
     let location = weather.location_name.as_c_str().to_str().unwrap_or("");
     ctx.set_text_color(BLACK);
     ctx.draw_text(
-        format_cstr!(
+        ufmt_cstr!(
             &mut buf,
             "{}° {}",
             weather.data.current_temperature,
@@ -360,10 +393,16 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
         GTextAlignment::Center,
     );
 
-    let current_date = local_now().date();
+    let current_time = local_now();
 
     ctx.draw_text(
-        format_cstr!(&mut buf, "{}", current_date.strftime("%a %b %d")),
+        ufmt_cstr!(
+            &mut buf,
+            "{} {} {}",
+            day_name(current_time.wday),
+            month_name(current_time.month),
+            current_time.mday
+        ),
         font,
         GRect {
             origin: GPoint {
@@ -380,10 +419,11 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
     );
 }
 
-fn line_is_on_midnight(now: jiff::civil::DateTime, segment_idx: usize) -> bool {
-    let dt = now + 15.minutes() * segment_idx as i64;
+fn line_is_on_midnight(now: Timestamp, segment_idx: usize) -> bool {
+    let ts = now + Duration::from_mins(15) * segment_idx as u32;
+    let dt = ts.as_datetime_in_local();
 
-    dt.hour() == 0 && dt.minute() == 0
+    dt.hour == 0 && dt.min == 0
 }
 
 extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::types::GContext) {
@@ -396,25 +436,9 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
     let ctx: Context<'_> = Context::from_raw(ctx);
 
     // round to first 15 minute interval
-    let now = utc_now()
-        .round(
-            jiff::TimestampRound::new()
-                .smallest(jiff::Unit::Minute)
-                .increment(15)
-                .mode(jiff::RoundMode::Floor),
-        )
-        .unwrap();
+    let now = utc_now().round_to(Duration::from_mins(15));
 
-    let now_dt = local_now()
-        .round(
-            jiff::civil::DateTimeRound::new()
-                .smallest(jiff::Unit::Minute)
-                .increment(15)
-                .mode(jiff::RoundMode::Floor),
-        )
-        .unwrap();
-
-    let now_ts = now.as_second() as u32;
+    let now_ts = now.as_secs();
     let offset_15 = ((now_ts - weather_data.report_start) / (15 * 60)) as usize;
     let offset_hour = ((now_ts - weather_data.report_start) / (60 * 60)) as usize;
 
@@ -498,7 +522,7 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
             draw_cloud_line(&ctx, &bounds, x_i16, interp_hr.cloud_cover);
         }
 
-        if !is_doubled && line_is_on_midnight(now_dt, segment_idx) {
+        if !is_doubled && line_is_on_midnight(now, segment_idx) {
             let day_idx = ((now_ts - weather_data.report_start) / (60 * 60 * 24)) as usize;
             let next_day_idx = if day_idx < WEATHER_NUM_DAYS {
                 day_idx + 1

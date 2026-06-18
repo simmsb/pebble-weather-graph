@@ -17,3 +17,7 @@ pub fn unsubscribe() {
 pub fn peek(metric: HealthMetric) -> HealthValue {
     unsafe { sys::health_service_peek_current_value(metric) }
 }
+
+pub fn sum_today(metric: HealthMetric) -> HealthValue {
+    unsafe { sys::health_service_sum_today(metric) }
+}

@@ -1,4 +1,7 @@
-use gravel::foundation::event::battery_state::BatteryChargeState;
+use gravel::foundation::event::{
+    battery_state::{self, BatteryChargeState},
+    connection,
+};
 use gravel::graphics::draw::Context;
 use gravel::graphics::types::{GPoint, GRect};
 use gravel::graphics::{BLACK, GREEN};
@@ -159,5 +162,13 @@ impl TopBarLayer {
             self.container.user_data_mut().battery = state;
         }
         self.container.mark_dirty();
+    }
+
+    pub fn peek(&mut self) {
+        let battery = battery_state::peek();
+        let bt = connection::peek_pebble_app();
+
+        self.set_battery(battery);
+        self.set_bt(bt);
     }
 }

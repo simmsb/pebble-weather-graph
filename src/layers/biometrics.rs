@@ -1,40 +1,45 @@
-use gravel::graphics::types::{GAlign, GRect, GSize};
 use gravel::graphics::{BLACK, CLEAR, GTextOverflowMode, SystemFont, WHITE};
 use gravel::prelude::*;
-use gravel::ui::layer::{Layer, TextAlignment, TextLayer, TextLayerRef};
+use gravel::ui::layer::{Layer, TextAlignment, TextLayer};
 use gravel::{
     foundation::event::health,
     graphics::draw::{Context, align_rect, text_layout_size},
 };
-use gravel_sys::{
-    foundation::event::health::{HealthEventType, HealthMetric},
-    ui::layer::{Layer as SysLayer, LayerUpdateProc, layer_get_data},
+use gravel::{
+    graphics::types::{GAlign, GRect, GSize},
+    ui::layer::LayerRef,
 };
-use heapless::CString;
+use gravel_sys::{
+    foundation::event::health::HealthMetric,
+    ui::layer::{Layer as SysLayer, LayerUpdateProc},
+};
 
-use crate::format_cstr;
+use crate::ufmt_cstr;
 
 const BORDER_H_PAD: i16 = 5;
 const FONT_H: i16 = 18;
 const LABEL_LEN: usize = 10;
 
+#[pin_init::pin_data]
 pub struct BiometricsData {
-    hr: TextLayerRef,
-    steps: TextLayerRef,
+    #[pin]
+    hr: TextLayer<LABEL_LEN>,
+    #[pin]
+    steps: TextLayer<LABEL_LEN>,
     font: SystemFont,
 }
 
 pub struct BiometricsLayer {
     container: Layer<BiometricsData>,
-    hr: TextLayer,
-    steps: TextLayer,
-    hr_buf: CString<LABEL_LEN>,
-    steps_buf: CString<LABEL_LEN>,
 }
 
-extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::types::GContext) {
-    let data = unsafe { &*layer_get_data(layer).cast::<BiometricsData>() };
-    let bounds = unsafe { gravel_sys::ui::layer::layer_get_bounds(layer) };
+extern "C" fn update_proc(
+    raw_layer: *mut SysLayer,
+    ctx: *mut gravel_sys::graphics::types::GContext,
+) {
+    let mut layer = unsafe { LayerRef::<BiometricsData>::from_raw(raw_layer) };
+    let bounds = layer.bounds();
+    let data = unsafe { layer.user_data_mut() };
     let ctx = Context::from_raw(ctx);
     let font = data.font.load();
 
@@ -95,45 +100,32 @@ impl BiometricsLayer {
         let w = frame.size.x;
         let font = SystemFont::Gothic18;
 
-        let hr = TextLayer::builder(GRect {
+        let mut hr = TextLayer::new(GRect {
             origin: Default::default(),
             size: GSize { x: w, y: FONT_H },
         })
-        .system_font(font)
-        .background_color(CLEAR)
-        .text_color(WHITE)
-        .build()
-        .expect("hr text layer");
+        .unwrap();
+        hr.set_system_font(font)
+            .set_background_color(CLEAR)
+            .set_text_color(WHITE);
 
-        let steps = TextLayer::builder(GRect {
+        let mut steps = TextLayer::new(GRect {
             origin: Default::default(),
             size: GSize { x: w, y: FONT_H },
         })
-        .system_font(font)
-        .background_color(CLEAR)
-        .text_color(WHITE)
-        .build()
-        .expect("steps text layer");
+        .unwrap();
+        steps
+            .set_system_font(font)
+            .set_background_color(CLEAR)
+            .set_text_color(WHITE);
 
-        let container = Layer::<BiometricsData>::new_with_data(
-            frame,
-            BiometricsData {
-                hr: hr.as_ref(),
-                steps: steps.as_ref(),
-                font,
-            },
-        );
-        container.add_child(&hr.layer());
-        container.add_child(&steps.layer());
+        let container =
+            Layer::<BiometricsData>::new_with_data(frame, BiometricsData { hr, steps, font });
+        container.add_child(&container.user_data().hr.layer());
+        container.add_child(&container.user_data().steps.layer());
         container.set_update_proc(update_proc as LayerUpdateProc);
 
-        Self {
-            container,
-            hr,
-            steps,
-            hr_buf: CString::new(),
-            steps_buf: CString::new(),
-        }
+        Self { container }
     }
 
     pub fn layer(&self) -> &Layer<BiometricsData> {
@@ -141,15 +133,17 @@ impl BiometricsLayer {
     }
 
     pub fn update(&mut self) {
+        let mut data = unsafe { self.container.user_data_mut() };
         let hr = health::peek(HealthMetric::HEALTH_METRIC_HEART_RATE_BPM);
-        let steps = health::peek(HealthMetric::HEALTH_METRIC_STEP_COUNT);
-        self.hr
-            .set_text(format_cstr!(&mut self.hr_buf, "H {} / ", hr));
-        self.steps
-            .set_text(format_cstr!(&mut self.steps_buf, "S {}", steps));
+        let steps: i32 = health::sum_today(HealthMetric::HEALTH_METRIC_STEP_COUNT);
+
+        data.as_mut().project().hr.update_text(|s| {
+            ufmt_cstr!(s, "H {} / ", hr);
+        });
+        data.as_mut().project().steps.update_text(|s| {
+            ufmt_cstr!(s, "S {}", steps);
+        });
 
         self.container.mark_dirty();
-        self.hr.layer().mark_dirty();
-        self.steps.layer().mark_dirty();
     }
 }

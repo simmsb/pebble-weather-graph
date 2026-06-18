@@ -38,6 +38,17 @@ macro_rules! format_cstr {
     };
 }
 
+#[macro_export]
+macro_rules! ufmt_cstr {
+    ($buf:expr, $($arg:tt)*) => {
+        {
+            *$buf = ::heapless::CString::new();
+            let _ = ::ufmt::uwrite!($buf, $($arg)*);
+            $buf.as_c_str()
+        }
+    };
+}
+
 pub fn find_i32(reader: &mut DictReader, key: u32) -> Option<i32> {
     unsafe {
         match reader.find(key) {
@@ -46,22 +57,6 @@ pub fn find_i32(reader: &mut DictReader, key: u32) -> Option<i32> {
             Some(DictValue::U8(v)) => Some(v as i32),
             Some(DictValue::U32(v)) => Some(v as i32),
             _ => None,
-        }
-    }
-}
-
-pub fn find_cstring_copy<const N: usize>(
-    reader: &mut DictReader,
-    key: u32,
-    dest: &mut CString<N>,
-) -> bool {
-    unsafe {
-        if let Some(DictValue::CString(s)) = reader.find(key) {
-            *dest = CString::from_bytes_truncating_at_nul(s.to_bytes_with_nul())
-                .unwrap_or_else(|_| CString::new());
-            true
-        } else {
-            false
         }
     }
 }

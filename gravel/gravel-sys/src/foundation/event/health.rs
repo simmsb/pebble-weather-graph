@@ -5,6 +5,7 @@ unsafe extern "C" {
     ) -> bool;
     pub fn health_service_events_unsubscribe() -> bool;
     pub fn health_service_peek_current_value(metric: HealthMetric) -> HealthValue;
+    pub fn health_service_sum_today(metric: HealthMetric) -> HealthValue;
 }
 
 c_enum! {

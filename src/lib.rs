@@ -66,7 +66,6 @@ impl<T> SingleCoreCell<T> {
 unsafe impl<T> Send for SingleCoreCell<T> {}
 unsafe impl<T> Sync for SingleCoreCell<T> {}
 
-
 pub struct AppState {
     pub time_layer: TimeLayer,
     pub top_bar: TopBarLayer,
@@ -98,10 +97,9 @@ impl WindowHandlers<()> for AppWindowHandlers {
             size: gravel::graphics::types::GSize { x: w, y: TL_TIME_H },
         });
         root.add_child(time_layer.layer());
-        time_layer.update_now();
         y += TL_TIME_Y_TOP + TL_TIME_H;
 
-        let top_bar = TopBarLayer::new(GRect {
+        let mut top_bar = TopBarLayer::new(GRect {
             origin: gravel::graphics::types::GPoint {
                 x: 0,
                 y: TL_TOP_BAR_Y_TOP,
@@ -121,7 +119,6 @@ impl WindowHandlers<()> for AppWindowHandlers {
                 y: TL_BIOMETRICS_H,
             },
         });
-        biometrics.update();
         root.add_child(biometrics.layer());
         y += TL_BIOMETRICS_H;
 
@@ -139,6 +136,9 @@ impl WindowHandlers<()> for AppWindowHandlers {
         let _ = message::open(2500, 64);
 
         request_weather();
+        time_layer.update_now();
+        biometrics.update();
+        top_bar.peek();
 
         *APP_STATE.get_mut() = Some(AppState {
             time_layer,
@@ -210,12 +210,13 @@ impl tick_timer::TickHandler for TickHandler {
 struct ConnHandlers;
 
 impl ConnectionHandlers for ConnHandlers {
-    extern "C" fn pebble_app(_connected: bool) {
+    extern "C" fn pebble_app(connected_in: bool) {
         let mut app_state_ref = APP_STATE.get_mut();
         let Some(app_state) = app_state_ref.as_mut() else {
             return;
         };
         let connected = connection::peek_pebble_app();
+        crate::debug!("Connection callback: {connected_in}, peek: {connected}");
         app_state.top_bar.set_bt(connected);
     }
 }
@@ -232,6 +233,7 @@ extern "C" fn on_battery(state: BatteryChargeState) {
     let Some(app_state) = app_state_ref.as_mut() else {
         return;
     };
+    crate::debug!("Battery callback: {state:?}");
     app_state.top_bar.set_battery(state);
 }
 
@@ -258,7 +260,6 @@ pub extern "C" fn main() -> isize {
     connection::subscribe::<ConnHandlers>();
 
     crate::info!("Hello world");
-
 
     gravel::foundation::app::event_loop();
     0
