@@ -1,5 +1,8 @@
+use core::{mem::MaybeUninit, u32};
+
 use gravel::foundation::dictionary::{DictReader, DictValue};
 use gravel::foundation::storage;
+use gravel_sys::foundation::storage::StatusCode;
 use heapless::CString;
 use micropb::{MessageDecode, PbDecoder};
 
@@ -9,7 +12,8 @@ pub const WEATHER_NUM_DAYS: usize = 2;
 pub const TL_WEATHER_SEGS_PER_HOUR: usize = 4;
 pub const WEATHER_CITY_MAX_LEN: usize = 32;
 
-const STORAGE_KEY_WEATHER: u32 = 1;
+const STORAGE_KEY_WEATHER_START: u32 = 1;
+const STORAGE_CHUNK_SIZE: usize = 128;
 
 pub struct Weather {
     pub data: crate::messages::Weather,
@@ -24,36 +28,49 @@ impl Default for Weather {
 
 impl Weather {
     pub fn new() -> Self {
-        let mut s = Self {
-            data: crate::messages::Weather::default(),
-            location_name: CString::new(),
-        };
+        let mut s = MaybeUninit::<Self>::uninit();
 
-        if storage::exists(STORAGE_KEY_WEATHER)
-            && storage::get_size(STORAGE_KEY_WEATHER) as usize == core::mem::size_of::<Self>()
-        {
-            unsafe {
-                let _ = storage::read(
-                    STORAGE_KEY_WEATHER,
-                    core::slice::from_raw_parts_mut(
-                        &mut s as *mut _ as *mut _,
-                        core::mem::size_of::<Self>(),
-                    ),
-                );
+        if Weather::try_load_from_storage(&mut s).is_err() {
+            crate::info!("No saved weather or decode failed, using default");
+            s.write(Self {
+                data: crate::messages::Weather::default(),
+                location_name: CString::new(),
+            });
+        }
+
+        unsafe { s.assume_init() }
+    }
+
+    // probably horribly broken and unsafe, but it might work
+    fn try_load_from_storage(s: &mut MaybeUninit<Self>) -> Result<(), ()> {
+        let byte_slice = s.as_bytes_mut();
+
+        for (i, chunk) in byte_slice.chunks_mut(STORAGE_CHUNK_SIZE).enumerate() {
+            let key = STORAGE_KEY_WEATHER_START + i as u32;
+            if storage::exists(key) && storage::get_size(key) as usize == chunk.len() {
+                storage::read_uninit(key, chunk).map_err(|_| ())?;
+            } else {
+                return Err(());
             }
         }
 
-        s
+        Ok(())
     }
 
-    pub fn save(&self) {
-        let bytes = unsafe {
+    pub fn save(&self) -> Result<(), StatusCode> {
+        let byte_slice = unsafe {
             core::slice::from_raw_parts(
-                self as *const Self as *const u8,
+                (self as *const _) as *const u8,
                 core::mem::size_of::<Self>(),
             )
         };
-        let _ = storage::write(STORAGE_KEY_WEATHER, bytes);
+
+        for (i, chunk) in byte_slice.chunks(STORAGE_CHUNK_SIZE).enumerate() {
+            let key = STORAGE_KEY_WEATHER_START + i as u32;
+            storage::write(key, chunk)?;
+        }
+
+        Ok(())
     }
 
     pub fn update_from_message(&mut self, reader: &mut DictReader<'_>) -> bool {
@@ -76,7 +93,9 @@ impl Weather {
             self.location_name = CString::new();
             let _ = ufmt::uwrite!(&mut self.location_name, "{}", self.data.location_name);
 
-            self.save();
+            if let Err(e) = self.save() {
+                crate::error!("Failed to save weather: {e:?}");
+            }
             return true;
         }
 

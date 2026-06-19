@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(maybe_uninit_as_bytes)]
 
 extern crate alloc;
 

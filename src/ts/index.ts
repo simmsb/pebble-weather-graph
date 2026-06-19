@@ -217,7 +217,7 @@ async function getWeather() {
     // Check cache first
     var cache = readCache();
     if (cache && cache.expiresAt > Date.now()) {
-        console.log('Carbon: using cached weather');
+        console.log('using cached weather');
         await buildAndSend(cache.weather, cache.locationName);
         return;
     }
@@ -229,7 +229,7 @@ async function getWeather() {
                 resolve(pos.coords);
             },
             function(err) {
-                reject('Carbon: geolocation error: ' + err.message);
+                reject('geolocation error: ' + err.message);
             },
             { timeout: 15000, maximumAge: 300000 }
         );
@@ -244,7 +244,7 @@ async function getWeather() {
 // console.log("hello world");
 
 Pebble.addEventListener('ready', function() {
-    console.log('Carbon: PebbleKit JS ready');
+    console.log('PebbleKit JS ready');
     getWeather();
 });
 
@@ -282,7 +282,7 @@ Pebble.addEventListener('showConfiguration', function() {
 
 Pebble.addEventListener('appmessage', function(e) {
     if (e.payload && e.payload['WEATHER_REQUEST']) {
-        console.log('Carbon: weather refresh requested');
+        console.log('weather refresh requested');
         getWeather();
     }
 });
