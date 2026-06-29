@@ -245,7 +245,6 @@ async function getWeather() {
 
 Pebble.addEventListener('ready', function() {
     console.log('PebbleKit JS ready');
-    getWeather();
 });
 
 Pebble.addEventListener('showConfiguration', function() {

@@ -1,100 +1,89 @@
-use gravel::foundation::event::{
-    battery_state::{self, BatteryChargeState},
-    connection,
+use core::cell::Cell;
+
+use futures::StreamExt;
+use pebble_async::{
+    bindings::{BatteryChargeState, GPoint, GRect},
+    colour::GColor,
+    events,
+    graphics_context::GContext,
+    layers::{Layer, LayerMut},
 };
-use gravel::graphics::draw::Context;
-use gravel::graphics::types::{GPoint, GRect};
-use gravel::graphics::{BLACK, GREEN};
-use gravel::prelude::*;
-use gravel::ui::layer::Layer;
-use gravel_sys::ui::layer::{Layer as SysLayer, LayerUpdateProc, layer_get_data};
 
-pub struct TopBarData {
-    bluetooth_on: bool,
-    battery: BatteryChargeState,
-}
-
-pub struct TopBarLayer {
-    container: Layer<TopBarData>,
-}
-
-extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::types::GContext) {
-    let data = unsafe { &*layer_get_data(layer).cast::<TopBarData>() };
-    let bounds = unsafe { gravel_sys::ui::layer::layer_get_bounds(layer) };
-    let ctx = Context::from_raw(ctx);
-
-    ctx.set_stroke_color(BLACK);
+fn draw_bluetooth_icon(ctx: &mut GContext) {
+    ctx.set_stroke_colour(GColor::BLACK);
     ctx.set_stroke_width(1);
 
-    if data.bluetooth_on {
-        let x = 5;
-        let y = 1;
-        let w = 6;
-        let h = 10;
-        let cross_offset = 2;
+    let x = 5;
+    let y = 1;
+    let w = 6;
+    let h = 10;
+    let cross_offset = 2;
 
-        ctx.set_antialiased(false);
-        ctx.draw_line(
-            GPoint {
-                x,
-                y: y + cross_offset,
-            },
-            GPoint {
-                x: x + w,
-                y: y + h - cross_offset,
-            },
-        );
-        ctx.draw_line(
-            GPoint {
-                x: x + w,
-                y: y + h - cross_offset,
-            },
-            GPoint {
-                x: x + w / 2,
-                y: y + h + 1,
-            },
-        );
-        ctx.draw_line(
-            GPoint {
-                x: x + w / 2,
-                y: y + h,
-            },
-            GPoint { x: x + w / 2, y },
-        );
-        ctx.draw_line(
-            GPoint {
-                x: x + w / 2,
-                y: y - 1,
-            },
-            GPoint {
-                x: x + w,
-                y: y + cross_offset,
-            },
-        );
-        ctx.draw_line(
-            GPoint {
-                x: x + w,
-                y: y + cross_offset,
-            },
-            GPoint {
-                x,
-                y: y + h - cross_offset,
-            },
-        );
-    }
+    ctx.set_antialiased(false);
+    ctx.draw_line(
+        GPoint {
+            x,
+            y: y + cross_offset,
+        },
+        GPoint {
+            x: x + w,
+            y: y + h - cross_offset,
+        },
+    );
+    ctx.draw_line(
+        GPoint {
+            x: x + w,
+            y: y + h - cross_offset,
+        },
+        GPoint {
+            x: x + w / 2,
+            y: y + h + 1,
+        },
+    );
+    ctx.draw_line(
+        GPoint {
+            x: x + w / 2,
+            y: y + h,
+        },
+        GPoint { x: x + w / 2, y },
+    );
+    ctx.draw_line(
+        GPoint {
+            x: x + w / 2,
+            y: y - 1,
+        },
+        GPoint {
+            x: x + w,
+            y: y + cross_offset,
+        },
+    );
+    ctx.draw_line(
+        GPoint {
+            x: x + w,
+            y: y + cross_offset,
+        },
+        GPoint {
+            x,
+            y: y + h - cross_offset,
+        },
+    );
+}
 
+fn draw_battery(ctx: &mut GContext, bounds: &GRect, state: &BatteryChargeState) {
     let w = 12;
     let h = 7;
-    let x = bounds.size.x - (w + 7);
+    let x = bounds.size.w - (w + 7);
     let y = 0;
     let bar_h = 3;
     let bar_inset = (h - bar_h) / 2;
     let num_bars = (w - 2) / 2;
     let pct_per_bar = 100 / (num_bars + 2);
 
+    ctx.set_stroke_width(1);
     ctx.set_antialiased(false);
-    if data.battery.is_charging {
-        ctx.set_stroke_color(GREEN);
+    ctx.set_stroke_colour(GColor::GREEN);
+    if state.is_charging {
+        ctx.set_stroke_colour(GColor::GREEN);
     }
 
     ctx.draw_line(GPoint { x, y }, GPoint { x, y: y + h });
@@ -112,7 +101,7 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
         },
     );
 
-    let pc = data.battery.charge_percent;
+    let pc = state.charge_percent;
     for i in 0..num_bars {
         if pc >= (pct_per_bar * (i + 1)) as u8 {
             ctx.draw_line(
@@ -129,46 +118,39 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
     }
 }
 
-impl TopBarLayer {
-    pub fn new(frame: GRect) -> Self {
-        let container = Layer::<TopBarData>::new_with_data(
-            frame,
-            TopBarData {
-                bluetooth_on: false,
-                battery: BatteryChargeState {
-                    charge_percent: 0,
-                    is_charging: false,
-                    is_plugged: false,
-                },
-            },
-        );
-        container.set_update_proc(update_proc as LayerUpdateProc);
-        Self { container }
-    }
+pub async fn top_bar_layer(container: Layer<'_>) {
+    let bounds = container.bounds();
+    let bluetooth_on = Cell::new(events::connection::peek_pebble_app_connection());
+    let battery_state = Cell::new(events::battery_state::battery_service_peek_current_value());
 
-    pub fn layer(&self) -> &Layer<TopBarData> {
-        &self.container
-    }
+    pin_init::stack_pin_init!(let container = container
+                              .with_update_proc(|_layer, mut ctx| {
+                                  let bluetooth_on = bluetooth_on.get();
+                                  let battery_state = battery_state.get();
 
-    pub fn set_bt(&mut self, on: bool) {
-        unsafe {
-            self.container.user_data_mut().bluetooth_on = on;
+                                  if bluetooth_on {
+                                      draw_bluetooth_icon(&mut ctx);
+                                  }
+
+                                  draw_battery(&mut ctx, &bounds, &battery_state);
+                              })
+    );
+
+    pin_init::stack_pin_init!(let battery_events = events::battery_state::stream());
+    pin_init::stack_pin_init!(let connection_events = events::connection::stream());
+
+    loop {
+        container.mark_dirty();
+
+        match embassy_futures::select::select(battery_events.next(), connection_events.next()).await
+        {
+            embassy_futures::select::Either::First(Some(x)) => {
+                battery_state.set(x);
+            }
+            embassy_futures::select::Either::Second(Some(x)) => {
+                bluetooth_on.set(x);
+            }
+            _ => {}
         }
-        self.container.mark_dirty();
-    }
-
-    pub fn set_battery(&mut self, state: BatteryChargeState) {
-        unsafe {
-            self.container.user_data_mut().battery = state;
-        }
-        self.container.mark_dirty();
-    }
-
-    pub fn peek(&mut self) {
-        let battery = battery_state::peek();
-        let bt = connection::peek_pebble_app();
-
-        self.set_battery(battery);
-        self.set_bt(bt);
     }
 }

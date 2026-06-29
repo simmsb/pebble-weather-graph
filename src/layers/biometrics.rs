@@ -1,17 +1,17 @@
-use gravel::graphics::{BLACK, CLEAR, GTextOverflowMode, SystemFont, WHITE};
-use gravel::prelude::*;
-use gravel::ui::layer::{Layer, TextAlignment, TextLayer};
-use gravel::{
-    foundation::event::health,
-    graphics::draw::{Context, align_rect, text_layout_size},
-};
-use gravel::{
-    graphics::types::{GAlign, GRect, GSize},
-    ui::layer::LayerRef,
-};
-use gravel_sys::{
-    foundation::event::health::HealthMetric,
-    ui::layer::{Layer as SysLayer, LayerUpdateProc},
+use core::cell::{Cell, RefCell};
+
+use futures::StreamExt as _;
+use heapless::CString;
+use pebble_async::{
+    IsLayer as _,
+    bindings::{
+        GAlign, GCornerMask, GRect, GSize, GTextAlignment, GTextOverflowMode, HealthMetric,
+    },
+    colour::{self, GColor},
+    events,
+    font::Font,
+    graphics_context::GContext,
+    layers::{Layer, LayerMut, TextLayer},
 };
 
 use crate::ufmt_cstr;
@@ -20,130 +20,84 @@ const BORDER_H_PAD: i16 = 5;
 const FONT_H: i16 = 18;
 const LABEL_LEN: usize = 10;
 
-#[pin_init::pin_data]
-pub struct BiometricsData {
-    #[pin]
-    hr: TextLayer<LABEL_LEN>,
-    #[pin]
-    steps: TextLayer<LABEL_LEN>,
-    font: SystemFont,
-}
+pub async fn biometrics_layer(container: Layer<'_>) {
+    let bounds = container.bounds();
+    let font = Font::get_system_font(pebble_async::bindings::FONT_KEY_GOTHIC_18);
 
-pub struct BiometricsLayer {
-    container: Layer<BiometricsData>,
-}
+    let mut hr_layer = container.new_child::<TextLayer>(bounds).unwrap();
+    hr_layer.set_font(font);
+    hr_layer.set_background_colour(colour::GColor::CLEAR);
+    hr_layer.set_text_colour(colour::GColor::WHITE);
 
-extern "C" fn update_proc(
-    raw_layer: *mut SysLayer,
-    ctx: *mut gravel_sys::graphics::types::GContext,
-) {
-    let mut layer = unsafe { LayerRef::<BiometricsData>::from_raw(raw_layer) };
-    let bounds = layer.bounds();
-    let data = unsafe { layer.user_data_mut() };
-    let ctx = Context::from_raw(ctx);
-    let font = data.font.load();
+    let mut steps_layer = container.new_child::<TextLayer>(bounds).unwrap();
+    steps_layer.set_font(font);
+    steps_layer.set_background_colour(colour::GColor::CLEAR);
+    steps_layer.set_text_colour(colour::GColor::WHITE);
 
-    let hr_text = data.hr.text();
-    let steps_text = data.steps.text();
+    let aligned = Cell::new(GRect::new(0, 0, 0, 0));
 
-    let hr_size = text_layout_size(
-        hr_text,
-        font,
-        bounds,
-        GTextOverflowMode::Fill,
-        TextAlignment::Left,
-    );
-    let steps_size = text_layout_size(
-        steps_text,
-        font,
-        bounds,
-        GTextOverflowMode::Fill,
-        TextAlignment::Left,
-    );
+    pin_init::stack_pin_init!(let container = container.with_update_proc(|_layer, mut ctx| {
+        ctx.set_antialiased(true);
+        ctx.set_stroke_width(0);
+        ctx.set_fill_colour(GColor::BLACK);
+        ctx.fill_rect(aligned.get(), 6, GCornerMask::GCornersAll);
+    }));
 
-    let total_width = hr_size.x + steps_size.x + 2 * BORDER_H_PAD;
+    pin_init::stack_pin_init!(let health_stream = events::health::stream());
 
-    let aligned = GRect {
-        origin: Default::default(),
-        size: GSize {
-            x: total_width,
-            y: bounds.size.y,
-        },
-    };
-    let aligned = align_rect(aligned, &bounds, GAlign::Center);
+    loop {
+        let mut hr_buf = CString::<12>::new();
+        let mut steps_buf = CString::<12>::new();
 
-    ctx.set_stroke_color(BLACK);
-    ctx.set_antialiased(true);
-    ctx.set_fill_color(BLACK);
-    ctx.set_stroke_width(0);
-    ctx.fill_rect(aligned, 6);
-    ctx.set_antialiased(false);
+        let hr = events::health::health_service_peek_current_value(
+            HealthMetric::HealthMetricHeartRateBPM,
+        );
+        let steps = events::health::health_service_today(HealthMetric::HealthMetricStepCount);
 
-    data.hr.set_frame(GRect {
-        origin: gravel::graphics::types::GPoint {
-            x: aligned.origin.x + BORDER_H_PAD,
-            y: aligned.origin.y,
-        },
-        size: hr_size,
-    });
-    data.steps.set_frame(GRect {
-        origin: gravel::graphics::types::GPoint {
-            x: aligned.origin.x + hr_size.x + BORDER_H_PAD,
-            y: aligned.origin.y,
-        },
-        size: steps_size,
-    });
-}
+        let hr_text = ufmt_cstr!(&mut hr_buf, "H {} / ", hr);
+        let steps_text = ufmt_cstr!(&mut steps_buf, "S {}", steps);
 
-impl BiometricsLayer {
-    pub fn new(frame: GRect) -> Self {
-        let w = frame.size.x;
-        let font = SystemFont::Gothic18;
+        let bounds = container.bounds();
+        let hr_size = GContext::get_text_content_size(
+            hr_text,
+            font,
+            bounds,
+            GTextOverflowMode::GTextOverflowModeFill,
+            GTextAlignment::GTextAlignmentLeft,
+        );
+        let steps_size = GContext::get_text_content_size(
+            steps_text,
+            font,
+            bounds,
+            GTextOverflowMode::GTextOverflowModeFill,
+            GTextAlignment::GTextAlignmentLeft,
+        );
 
-        let mut hr = TextLayer::new(GRect {
-            origin: Default::default(),
-            size: GSize { x: w, y: FONT_H },
-        })
-        .unwrap();
-        hr.set_system_font(font)
-            .set_background_color(CLEAR)
-            .set_text_color(WHITE);
+        let total_width = hr_size.w + steps_size.w + 2 * BORDER_H_PAD;
 
-        let mut steps = TextLayer::new(GRect {
-            origin: Default::default(),
-            size: GSize { x: w, y: FONT_H },
-        })
-        .unwrap();
-        steps
-            .set_system_font(font)
-            .set_background_color(CLEAR)
-            .set_text_color(WHITE);
+        aligned.set(GRect::new(0, 0, total_width, bounds.size.h).align(
+            &bounds,
+            GAlign::GAlignCenter,
+            false,
+        ));
 
-        let container =
-            Layer::<BiometricsData>::new_with_data(frame, BiometricsData { hr, steps, font });
-        container.add_child(&container.user_data().hr.layer());
-        container.add_child(&container.user_data().steps.layer());
-        container.set_update_proc(update_proc as LayerUpdateProc);
+        hr_layer.layer_mut().set_frame(
+            hr_size.with_origin(aligned.get().origin.offset(GSize::new(BORDER_H_PAD, -3))),
+        );
+        steps_layer.layer_mut().set_frame(
+            hr_size.with_origin(
+                aligned
+                    .get()
+                    .origin
+                    .offset(GSize::new(hr_size.w + BORDER_H_PAD, -3)),
+            ),
+        );
 
-        Self { container }
-    }
+        let _hr_h = hr_layer.set_text(hr_text);
+        let _steps_h = steps_layer.set_text(steps_text);
 
-    pub fn layer(&self) -> &Layer<BiometricsData> {
-        &self.container
-    }
+        container.mark_dirty();
 
-    pub fn update(&mut self) {
-        let mut data = unsafe { self.container.user_data_mut() };
-        let hr = health::peek(HealthMetric::HEALTH_METRIC_HEART_RATE_BPM);
-        let steps: i32 = health::sum_today(HealthMetric::HEALTH_METRIC_STEP_COUNT);
-
-        data.as_mut().project().hr.update_text(|s| {
-            ufmt_cstr!(s, "H {} / ", hr);
-        });
-        data.as_mut().project().steps.update_text(|s| {
-            ufmt_cstr!(s, "S {}", steps);
-        });
-
-        self.container.mark_dirty();
+        let _ = health_stream.next().await;
     }
 }

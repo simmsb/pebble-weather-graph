@@ -1,66 +1,36 @@
-use gravel::graphics::types::GRect;
-use gravel::graphics::{BLACK, CLEAR};
-use gravel::prelude::*;
-use gravel::ui::layer::{Layer, TextAlignment, TextLayer};
+use core::ffi::CStr;
+
+use futures::StreamExt as _;
 use heapless::CString;
+use pebble_async::{
+    bindings::{GRect, GTextAlignment, TimeUnits},
+    colour, events,
+    font::Font,
+    layers::{Layer, LayerMut, LayerRef, TextLayer},
+    resources::Resource,
+};
 
-use crate::layout::TL_TIME_H;
-use crate::modules::clock::{Datetime, local_now, timestamp_from_pebble_tm};
-use crate::{generated::resource_ids, ufmt_cstr};
-use gravel_sys::std_c::time::tm;
+pub async fn time_layer(container: Layer<'_>) {
+    let resource = Resource::get_handle(pebble_async::bindings::RESOURCE_ID_LM_MONO_48).unwrap();
+    let font = Font::load_custom_font(resource);
 
-#[pin_init::pin_data]
-pub struct TimeData {
-    #[pin]
-    time_label: TextLayer<12>,
-}
+    let mut text_layer = container.new_child::<TextLayer>(container.bounds()).unwrap();
+    text_layer.set_font(font);
+    text_layer.set_background_colour(colour::GColor::CLEAR);
+    text_layer.set_text_colour(colour::GColor::BLACK);
+    text_layer.set_text_alignment(GTextAlignment::GTextAlignmentCenter);
 
-pub struct TimeLayer {
-    container: Layer<TimeData>,
-}
+    pin_init::stack_pin_init!(let tick_stream = events::tick::stream(TimeUnits::MINUTE_UNIT));
 
-impl TimeLayer {
-    pub fn new(frame: GRect) -> Self {
-        let w = frame.size.x;
+    loop {
+        let mut s = [0u8; 16];
+        unsafe {
+            pebble_async::bindings::clock_copy_time_string(s.as_mut_ptr(), 15);
+        }
+        let cstr = CStr::from_bytes_until_nul(&s).unwrap();
 
-        let resource =
-            gravel::foundation::resources::get_handle(resource_ids::RESOURCE_ID_LM_MONO_48);
-        let mut time_label = TextLayer::new(GRect {
-            origin: Default::default(),
-            size: gravel::graphics::types::GSize { x: w, y: TL_TIME_H },
-        })
-        .unwrap();
+        let _tg = text_layer.set_text(cstr);
 
-        time_label
-            .set_custom_font(resource)
-            .set_background_color(CLEAR)
-            .set_text_color(BLACK)
-            .set_alignment(TextAlignment::Center);
-
-        let container = Layer::new_with_data(frame, TimeData { time_label });
-
-        container.add_child(&container.user_data().time_label.layer());
-
-        Self { container }
-    }
-
-    pub fn layer(&self) -> &Layer<TimeData> {
-        &self.container
-    }
-
-    pub fn update(&mut self, tick_time: Datetime) {
-        let data = unsafe { self.container.user_data_mut() };
-
-        data.project().time_label.update_text(|s| {
-            ufmt_cstr!(s, "{}:{}", tick_time.hour, tick_time.min);
-        });
-    }
-
-    pub fn update_from_tm(&mut self, tick_time: &tm) {
-        self.update(timestamp_from_pebble_tm(tick_time));
-    }
-
-    pub fn update_now(&mut self) {
-        self.update(local_now());
+        let _ = tick_stream.next().await;
     }
 }

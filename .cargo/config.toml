@@ -4,8 +4,10 @@ build-std-features = ["optimize_for_size"]
 
 [build]
 target = "thumbv7m-none-eabi"
+
+[target.thumbv7m-none-eabi]
 rustflags = [
-  # Enabling these reduces code size by 1k or so
+  "-C", "linker-plugin-lto",
   "-Z", "merge-functions=aliases",
   "-C", "link-arg=--icf=all",
   "-C", "link-arg=-O3",

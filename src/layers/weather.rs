@@ -1,28 +1,28 @@
-use core::{ffi::CStr, time::Duration};
-
-use gravel::graphics::draw::{self, Context};
-use gravel::graphics::types::{GPoint, GRect};
-use gravel::graphics::{
-    BABY_BLUE_EYES, BLACK, CELESTE, CHROME_YELLOW, DARK_GRAY, ELECTRIC_ULTRAMARINE, GColor,
-    LIGHT_GRAY, ORANGE, PASTEL_YELLOW, PICTON_BLUE, RED, SUNSET_ORANGE, VERY_LIGHT_BLUE, YELLOW,
+use core::{
+    cell::{RefCell, RefMut},
+    ffi::CStr,
+    time::Duration,
 };
-use gravel::prelude::*;
-use gravel::ui::layer::Layer;
-use gravel_sys::graphics::fonts::FONT_KEY_GOTHIC_14;
-use gravel_sys::graphics::gdraw::{GTextAlignment, GTextOverflowMode};
-use gravel_sys::ui::layer::{Layer as SysLayer, LayerUpdateProc};
-use heapless::CString;
 
-use crate::APP_STATE;
+use futures::StreamExt as _;
+use heapless::CString;
+use pebble_async::{
+    app_message::{AppMessages, AppMessagesHandle},
+    bindings::{GPoint, GRect, GSize, GTextAlignment, GTextOverflowMode, TimeUnits},
+    colour::GColor,
+    events,
+    font::Font,
+    graphics_context::GContext,
+    layers::{Layer, LayerMut},
+    time::Timestamp,
+};
+
 use crate::{
     messages::{WeatherDaily, WeatherHourly, WeatherSegment},
-    modules::clock::{local_now, utc_now},
+    modules::weather::WEATHER,
 };
 use crate::{
-    modules::{
-        clock::{Datetime, Timestamp},
-        weather::{TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, WEATHER_NUM_DAYS, Weather},
-    },
+    modules::weather::{TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, WEATHER_NUM_DAYS, Weather},
     ufmt_cstr,
 };
 
@@ -37,52 +37,52 @@ const MAX_TEMP: i8 = 45;
 const SUN_LEVEL_MIN_TO_SHOW: u8 = 3;
 const RAIN_CHANCE_MIN_TO_SHOW: u8 = 30;
 
-pub struct WeatherLayer {
-    container: Layer<()>,
-}
+// pub struct WeatherLayer {
+//     container: Layer<()>,
+// }
 
 fn colour_for_temperature(temp: i8) -> GColor {
     if temp >= 35 {
-        RED
+        GColor::RED
     } else if temp >= 30 {
-        ORANGE
+        GColor::ORANGE
     } else if temp >= 25 {
-        SUNSET_ORANGE
+        GColor::SUNSET_ORANGE
     } else if temp >= 22 {
-        CHROME_YELLOW
+        GColor::CHROME_YELLOW
     } else if temp >= 18 {
-        PASTEL_YELLOW
+        GColor::PASTEL_YELLOW
     } else if temp >= 10 {
-        CELESTE
+        GColor::CELESTE
     } else if temp >= 0 {
-        PICTON_BLUE
+        GColor::PICTON_BLUE
     } else {
-        ELECTRIC_ULTRAMARINE
+        GColor::ELECTRIC_ULTRAMARINE
     }
 }
 
 fn temp_line_height(bounds: &GRect, temp: i8) -> i16 {
-    let range = (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD - 10) as i32;
+    let range = (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD - 10) as i32;
     (((temp as i32).clamp(MIN_TEMP as i32, MAX_TEMP as i32) - MIN_TEMP as i32) * range
         / (MAX_TEMP - MIN_TEMP) as i32) as i16
 }
 
-fn draw_temp_line(ctx: &Context, bounds: &GRect, x: i16, temp: i8) {
+fn draw_temp_line(ctx: &mut GContext, bounds: &GRect, x: i16, temp: i8) {
     let height = temp_line_height(bounds, temp);
-    let y0 = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+    let y0 = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     let y1 = y0 - height;
     ctx.set_antialiased(false);
-    ctx.set_stroke_color(colour_for_temperature(temp));
+    ctx.set_stroke_colour(colour_for_temperature(temp));
     ctx.set_stroke_width(1);
     ctx.draw_line(GPoint { x, y: y0 }, GPoint { x, y: y1 });
 }
 
-fn draw_temp_top_line(ctx: &Context, bounds: &GRect, x0: i16, x1: i16, temp0: i8, temp1: i8) {
-    let bottom = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+fn draw_temp_top_line(ctx: &mut GContext, bounds: &GRect, x0: i16, x1: i16, temp0: i8, temp1: i8) {
+    let bottom = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     let y0 = bottom - temp_line_height(bounds, temp0);
     let y1 = bottom - temp_line_height(bounds, temp1);
     ctx.set_antialiased(true);
-    ctx.set_stroke_color(BLACK);
+    ctx.set_stroke_colour(GColor::BLACK);
     ctx.set_stroke_width(1);
     ctx.draw_line(GPoint { x: x0, y: y0 }, GPoint { x: x1, y: y1 });
 }
@@ -94,42 +94,49 @@ fn cloud_cover_y(bounds: &GRect, cloud_cover: u8) -> (i16, i16) {
     (y_mid - cloud_radius, y_mid + cloud_radius + 1)
 }
 
-fn draw_cloud_line(ctx: &Context, bounds: &GRect, x: i16, cloud_cover: u8) {
+fn draw_cloud_line(ctx: &mut GContext, bounds: &GRect, x: i16, cloud_cover: u8) {
     if cloud_cover < 1 {
         return;
     }
     let (y0, y1) = cloud_cover_y(bounds, cloud_cover);
     ctx.set_antialiased(false);
-    ctx.set_stroke_color(DARK_GRAY);
+    ctx.set_stroke_colour(GColor::DARK_GRAY);
     ctx.set_stroke_width(1);
     ctx.draw_line(GPoint { x, y: y0 }, GPoint { x, y: y1 });
 }
 
-fn draw_sun_line(ctx: &Context, bounds: &GRect, x: i16, sun_level: u8, temp: i8, cloud_cover: u8) {
+fn draw_sun_line(
+    ctx: &mut GContext,
+    bounds: &GRect,
+    x: i16,
+    sun_level: u8,
+    temp: i8,
+    cloud_cover: u8,
+) {
     if sun_level < SUN_LEVEL_MIN_TO_SHOW {
         return;
     }
     let (_, cloud_y) = cloud_cover_y(bounds, cloud_cover);
-    let bottom = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+    let bottom = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     let y0 = bottom - (temp_line_height(bounds, temp) + 4);
     let y1 = cloud_y + 2;
-    let colour = PASTEL_YELLOW;
+    let colour = GColor::PASTEL_YELLOW;
     ctx.set_antialiased(false);
     ctx.set_stroke_width(1);
 
     if sun_level >= 6 {
-        let dot_colour = YELLOW;
+        let dot_colour = GColor::YELLOW;
         for y in y1..=y0 {
             let this_colour = if (y & 1) == (x & 1) {
                 dot_colour
             } else {
                 colour
             };
-            ctx.set_stroke_color(this_colour);
+            ctx.set_stroke_colour(this_colour);
             ctx.draw_pixel(GPoint { x, y });
         }
     } else {
-        ctx.set_stroke_color(colour);
+        ctx.set_stroke_colour(colour);
         ctx.draw_line(GPoint { x, y: y0 }, GPoint { x, y: y1 });
     }
 }
@@ -142,7 +149,7 @@ enum RainPattern {
 }
 
 fn draw_rain_line(
-    ctx: &Context,
+    ctx: &mut GContext,
     bounds: &GRect,
     x: i16,
     rain_chance: u8,
@@ -153,20 +160,20 @@ fn draw_rain_line(
         return;
     }
     let (_, cloud_y) = cloud_cover_y(bounds, cloud_cover);
-    let bottom = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+    let bottom = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     let y0 = bottom - (temp_line_height(bounds, temp) + 4);
     let y1 = cloud_y + 2;
 
     let (pattern, colour) = if rain_chance >= 90 {
-        (RainPattern::P90, VERY_LIGHT_BLUE)
+        (RainPattern::P90, GColor::VERY_LIGHT_BLUE)
     } else if rain_chance >= 60 {
-        (RainPattern::P60, BABY_BLUE_EYES)
+        (RainPattern::P60, GColor::BABY_BLUE_EYES)
     } else {
-        (RainPattern::P30, BABY_BLUE_EYES)
+        (RainPattern::P30, GColor::BABY_BLUE_EYES)
     };
 
     ctx.set_antialiased(false);
-    ctx.set_stroke_color(colour);
+    ctx.set_stroke_colour(colour);
     ctx.set_stroke_width(1);
 
     for y in y1..=y0 {
@@ -181,13 +188,13 @@ fn draw_rain_line(
     }
 }
 
-fn draw_is_day(ctx: &Context, bounds: &GRect, x: i16, is_day: bool) {
+fn draw_is_day(ctx: &mut GContext, bounds: &GRect, x: i16, is_day: bool) {
     if !is_day {
         return;
     }
-    let y = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+    let y = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     ctx.set_antialiased(false);
-    ctx.set_stroke_color(LIGHT_GRAY);
+    ctx.set_stroke_colour(GColor::LIGHT_GRAY);
     ctx.set_stroke_width(1);
     ctx.draw_line(GPoint { x, y: y + 2 }, GPoint { x, y: y + 4 });
 }
@@ -264,22 +271,23 @@ fn month_name(day: u8) -> &'static str {
 }
 
 fn draw_midnight_marker_and_dates(
-    ctx: &Context,
+    ctx: &mut GContext,
     bounds: &GRect,
+    font: Font,
     x: i16,
     temp: i8,
     day_left: &WeatherDaily,
     day_right: &WeatherDaily,
     is_first: bool,
 ) {
-    let bottom = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD);
+    let bottom = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD);
     let y0 = bounds.origin.y;
     let y1 = bottom - (temp_line_height(bounds, temp) + 8);
-    let y2 = bounds.origin.y + (bounds.size.y - TL_WEATHER_TEMP_BOTTOM_PAD) + 2;
-    let y3 = bounds.origin.y + (bounds.size.y - TL_WEATHER_CURRENT_HEIGHT);
+    let y2 = bounds.origin.y + (bounds.size.h - TL_WEATHER_TEMP_BOTTOM_PAD) + 2;
+    let y3 = bounds.origin.y + (bounds.size.h - TL_WEATHER_CURRENT_HEIGHT);
 
     ctx.set_antialiased(false);
-    ctx.set_stroke_color(LIGHT_GRAY);
+    ctx.set_stroke_colour(GColor::LIGHT_GRAY);
     ctx.set_stroke_width(1);
 
     let mut y = y0;
@@ -303,13 +311,13 @@ fn draw_midnight_marker_and_dates(
     let right_x = x + text_pad;
     let y = y2 + 2;
 
-    let font = unsafe {
-        gravel_sys::graphics::fonts::fonts_get_system_font(FONT_KEY_GOTHIC_14.as_ptr().cast())
-    };
+    // let font = unsafe {
+    //     gravel_sys::graphics::fonts::fonts_get_system_font(FONT_KEY_GOTHIC_14.as_ptr().cast())
+    // };
 
     let mut buf = CString::<32>::new();
 
-    ctx.set_text_color(BLACK);
+    ctx.set_text_colour(GColor::BLACK);
     ctx.draw_text(
         ufmt_cstr!(
             &mut buf,
@@ -321,10 +329,11 @@ fn draw_midnight_marker_and_dates(
         font,
         GRect {
             origin: GPoint { x: left_x, y },
-            size: gravel::graphics::types::GSize { x: width, y: 16 },
+            size: GSize { w: width, h: 16 },
         },
-        GTextOverflowMode::Fill,
-        GTextAlignment::Right,
+        GTextOverflowMode::GTextOverflowModeFill,
+        GTextAlignment::GTextAlignmentRight,
+        None,
     );
     ctx.draw_text(
         ufmt_cstr!(
@@ -337,19 +346,20 @@ fn draw_midnight_marker_and_dates(
         font,
         GRect {
             origin: GPoint { x: right_x, y: y },
-            size: gravel::graphics::types::GSize { x: width, y: 16 },
+            size: GSize { w: width, h: 16 },
         },
-        GTextOverflowMode::Fill,
-        GTextAlignment::Left,
+        GTextOverflowMode::GTextOverflowModeFill,
+        GTextAlignment::GTextAlignmentLeft,
+        None,
     );
 }
 
-fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
-    let line_y = bounds.origin.y + (bounds.size.y - TL_WEATHER_CURRENT_HEIGHT);
+fn draw_current_infos(ctx: &mut GContext, font: Font, bounds: &GRect, weather: &Weather) {
+    let line_y = bounds.origin.y + (bounds.size.h - TL_WEATHER_CURRENT_HEIGHT);
     let text_y = line_y + 1;
 
     ctx.set_stroke_width(1);
-    ctx.set_stroke_color(LIGHT_GRAY);
+    ctx.set_stroke_colour(GColor::LIGHT_GRAY);
 
     let mut x: i16 = 0;
     while (x as usize) < TL_WEATHER_WIDTH {
@@ -357,20 +367,20 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
         x += 2;
     }
 
-    let x_mid = bounds.origin.x + bounds.size.x / 2;
+    let x_mid = bounds.origin.x + bounds.size.w / 2;
     let mut y = line_y;
-    while y < bounds.origin.y + bounds.size.y {
+    while y < bounds.origin.y + bounds.size.h {
         ctx.draw_pixel(GPoint { x: x_mid, y });
         y += 2;
     }
 
-    let font = unsafe {
-        gravel_sys::graphics::fonts::fonts_get_system_font(FONT_KEY_GOTHIC_14.as_ptr().cast())
-    };
+    // let font = unsafe {
+    //     gravel_sys::graphics::fonts::fonts_get_system_font(FONT_KEY_GOTHIC_14.as_ptr().cast())
+    // };
 
     let mut buf = CString::<{ WEATHER_CITY_MAX_LEN + 10 }>::new();
-    let location = weather.location_name.as_c_str().to_str().unwrap_or("");
-    ctx.set_text_color(BLACK);
+    let location = weather.data.location_name.as_str();
+    ctx.set_text_colour(GColor::BLACK);
     ctx.draw_text(
         ufmt_cstr!(
             &mut buf,
@@ -384,24 +394,25 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
                 x: bounds.origin.x,
                 y: text_y,
             },
-            size: gravel::graphics::types::GSize {
-                x: bounds.size.x / 2,
-                y: 16,
+            size: GSize {
+                w: bounds.size.w / 2,
+                h: 16,
             },
         },
-        GTextOverflowMode::Fill,
-        GTextAlignment::Center,
+        GTextOverflowMode::GTextOverflowModeFill,
+        GTextAlignment::GTextAlignmentCenter,
+        None,
     );
 
-    let current_time = local_now();
+    let current_time = Timestamp::now().as_datetime_in_local();
 
     ctx.draw_text(
         ufmt_cstr!(
             &mut buf,
             "{} {} {}",
-            day_name(current_time.wday),
+            day_name(current_time.day_of_week),
             month_name(current_time.month),
-            current_time.mday
+            current_time.day_of_month
         ),
         font,
         GRect {
@@ -409,13 +420,14 @@ fn draw_current_infos(ctx: &Context, bounds: &GRect, weather: &Weather) {
                 x: x_mid,
                 y: text_y,
             },
-            size: gravel::graphics::types::GSize {
-                x: bounds.size.x / 2,
-                y: 16,
+            size: GSize {
+                w: bounds.size.w / 2,
+                h: 16,
             },
         },
-        GTextOverflowMode::Fill,
-        GTextAlignment::Center,
+        GTextOverflowMode::GTextOverflowModeFill,
+        GTextAlignment::GTextAlignmentCenter,
+        None,
     );
 }
 
@@ -423,36 +435,29 @@ fn line_is_on_midnight(now: Timestamp, segment_idx: usize) -> bool {
     let ts = now + Duration::from_mins(15) * segment_idx as u32;
     let dt = ts.as_datetime_in_local();
 
-    dt.hour == 0 && dt.min == 0
+    dt.hours == 0 && dt.mins == 0
 }
 
-extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::types::GContext) {
-    let app_state_ref = APP_STATE.get();
-    let app_state = app_state_ref.as_ref().unwrap();
-
-    let weather = &app_state.weather;
+fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Weather) {
     let weather_data = &weather.data;
-    let bounds = unsafe { gravel_sys::ui::layer::layer_get_bounds(layer) };
-    let ctx: Context<'_> = Context::from_raw(ctx);
-
     // round to first 15 minute interval
-    let now = utc_now().round_to(Duration::from_mins(15));
+    let now = Timestamp::now().round_to(Duration::from_mins(15));
 
     let now_ts = now.as_secs();
-    let offset_15 = ((now_ts - weather_data.report_start) / (15 * 60)) as usize;
-    let offset_hour = ((now_ts - weather_data.report_start) / (60 * 60)) as usize;
+    let offset_15 = ((now_ts - weather_data.report_start as i32) / (15 * 60)) as usize;
+    let offset_hour = ((now_ts - weather_data.report_start as i32) / (60 * 60)) as usize;
 
     let mut prev = WeatherSegment::default();
     let mut prev_hr = WeatherHourly::default();
     let mut prev_x: i16 = 0;
 
-    crate::info!(
+    pebble_async::info!(
         "Drawing weather, offset: {}, report_start: {}",
         offset_15,
         weather_data.report_start
     );
 
-    crate::debug!(
+    pebble_async::debug!(
         "Weather data sizes: segs: {}, hours: {}, days: {}",
         weather_data.segments.len(),
         weather_data.hourly_segments.len(),
@@ -508,9 +513,9 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
             .max(slot_hr.cloud_cover)
             .max(next_slot_hr.cloud_cover);
 
-        draw_sun_line(&ctx, &bounds, x_i16, interp.sun_level, max_temp, max_cloud);
+        draw_sun_line(ctx, &bounds, x_i16, interp.sun_level, max_temp, max_cloud);
         draw_rain_line(
-            &ctx,
+            ctx,
             &bounds,
             x_i16,
             interp_hr.rain_chance,
@@ -519,11 +524,11 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
         );
 
         if x & 1 != 0 {
-            draw_cloud_line(&ctx, &bounds, x_i16, interp_hr.cloud_cover);
+            draw_cloud_line(ctx, &bounds, x_i16, interp_hr.cloud_cover);
         }
 
         if !is_doubled && line_is_on_midnight(now, segment_idx) {
-            let day_idx = ((now_ts - weather_data.report_start) / (60 * 60 * 24)) as usize;
+            let day_idx = ((now_ts - weather_data.report_start as i32) / (60 * 60 * 24)) as usize;
             let next_day_idx = if day_idx < WEATHER_NUM_DAYS {
                 day_idx + 1
             } else {
@@ -531,8 +536,9 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
             };
             if day_idx < weather_data.daily.len() && next_day_idx < weather_data.daily.len() {
                 draw_midnight_marker_and_dates(
-                    &ctx,
+                    ctx,
                     &bounds,
+                    font,
                     x_i16,
                     interp.temperature,
                     &weather_data.daily[day_idx],
@@ -542,16 +548,16 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
                 drawn_midnight = true;
             }
         } else {
-            draw_is_day(&ctx, &bounds, x_i16, interp.is_day);
+            draw_is_day(ctx, &bounds, x_i16, interp.is_day);
         }
 
         if x & 1 != 0 {
-            draw_temp_line(&ctx, &bounds, x_i16, interp.temperature);
+            draw_temp_line(ctx, &bounds, x_i16, interp.temperature);
         }
 
         if x > 0 {
             draw_temp_top_line(
-                &ctx,
+                ctx,
                 &bounds,
                 prev_x,
                 x_i16,
@@ -565,21 +571,46 @@ extern "C" fn update_proc(layer: *mut SysLayer, ctx: *mut gravel_sys::graphics::
         prev_hr = interp_hr;
     }
 
-    draw_current_infos(&ctx, &bounds, weather);
+    draw_current_infos(ctx, font, &bounds, weather);
 }
 
-impl WeatherLayer {
-    pub fn new(frame: GRect) -> Self {
-        let container = Layer::new(frame);
-        container.set_update_proc(update_proc as LayerUpdateProc);
-        Self { container }
+pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandle<'_>) {
+    let weather = WEATHER.take();
+    weather.init();
+    let weather: RefCell<&'static mut Weather> = RefCell::new(weather);
+
+    let font =
+        pebble_async::font::Font::get_system_font(pebble_async::bindings::FONT_KEY_GOTHIC_14);
+
+    pin_init::stack_pin_init!(let container = container
+                              .with_update_proc(|layer, mut ctx| {
+                                  let bounds = layer.bounds();
+                                  update_proc(&mut ctx, font, &bounds, &*weather.borrow());
+                              })
+    );
+
+    pin_init::stack_pin_init!(let app_message_handle = app_messages.listen_received(|dict| {
+        let mut weather = weather.borrow_mut();
+        if weather.update_from_message(&mut dict.iter()) {
+            container.mark_dirty();
+        }
+    }));
+
+    pin_init::stack_pin_init!(let tick_stream = events::tick::stream(TimeUnits::MINUTE_UNIT | TimeUnits::HOUR_UNIT));
+
+    let now = Timestamp::now();
+    if Timestamp::from_secs(weather.borrow().data.report_start as i32)
+        < (now - Duration::from_hours(1))
+    {
+        pebble_async::info!("No saved weather or weather out of date, requesting new");
+        app_messages.send(|d| d.u8(pebble_async::messages::WEATHER_REQUEST(), 1));
     }
 
-    pub fn layer(&self) -> &Layer<()> {
-        &self.container
-    }
-
-    pub fn update(&self) {
-        self.container.mark_dirty();
+    while let Some((dt, unit)) = tick_stream.next().await {
+        if unit & TimeUnits::HOUR_UNIT != TimeUnits(0) {
+            app_messages.send(|d| d.u8(pebble_async::messages::WEATHER_REQUEST(), 1));
+        } else if unit & TimeUnits::MINUTE_UNIT != TimeUnits(0) && (dt.mins % 15) == 0 {
+            container.mark_dirty();
+        }
     }
 }

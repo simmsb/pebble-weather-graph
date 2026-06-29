@@ -1,12 +1,8 @@
 use core::{mem::MaybeUninit, u32};
 
-use gravel::foundation::dictionary::{DictReader, DictValue};
-use gravel::foundation::storage;
-use gravel_sys::foundation::storage::StatusCode;
-use heapless::CString;
+use heapless::String;
 use micropb::{MessageDecode, PbDecoder};
-
-use crate::generated::message_keys;
+use pebble_async::{bindings, dictionary::{DictionaryIterator, TupleValue}, storage};
 
 pub const WEATHER_NUM_DAYS: usize = 2;
 pub const TL_WEATHER_SEGS_PER_HOUR: usize = 4;
@@ -17,28 +13,30 @@ const STORAGE_CHUNK_SIZE: usize = 128;
 
 pub struct Weather {
     pub data: crate::messages::Weather,
-    pub location_name: CString<{ WEATHER_CITY_MAX_LEN + 1 }>,
 }
 
-impl Default for Weather {
-    fn default() -> Self {
-        Self::new()
+pub static WEATHER: static_cell::ConstStaticCell<Weather> = static_cell::ConstStaticCell::new(
+    Weather {
+        data: crate::messages::Weather {
+            report_start: 0,
+            current_temperature: 0,
+            location_name: String::new(),
+            segments: heapless::Vec::new(),
+            hourly_segments: heapless::Vec::new(),
+            daily: heapless::Vec::new(),
+        },
     }
-}
+);
 
 impl Weather {
-    pub fn new() -> Self {
-        let mut s = MaybeUninit::<Self>::uninit();
-
-        if Weather::try_load_from_storage(&mut s).is_err() {
-            crate::info!("No saved weather or decode failed, using default");
-            s.write(Self {
-                data: crate::messages::Weather::default(),
-                location_name: CString::new(),
-            });
+    pub fn init(&mut self) {
+        let s = unsafe {
+            // TODO: this is stupid unsafe, fix it
+            core::mem::transmute(self)
+        };
+        if Weather::try_load_from_storage(s).is_err() {
+            pebble_async::info!("No saved weather or decode failed");
         }
-
-        unsafe { s.assume_init() }
     }
 
     // probably horribly broken and unsafe, but it might work
@@ -57,7 +55,7 @@ impl Weather {
         Ok(())
     }
 
-    pub fn save(&self) -> Result<(), StatusCode> {
+    pub fn save(&self) -> Result<(), bindings::StatusCode> {
         let byte_slice = unsafe {
             core::slice::from_raw_parts(
                 (self as *const _) as *const u8,
@@ -73,12 +71,12 @@ impl Weather {
         Ok(())
     }
 
-    pub fn update_from_message(&mut self, reader: &mut DictReader<'_>) -> bool {
-        for (key, value) in reader.clone() {
-            if key != message_keys::MESSAGE_KEY_WEATHER_UPDATE() {
+    pub fn update_from_message(&mut self, reader: &mut DictionaryIterator) -> bool {
+        for tup in reader {
+            if tup.key() != pebble_async::messages::WEATHER_UPDATE() {
                 continue;
             }
-            let DictValue::ByteArray(buf) = value else {
+            let TupleValue::ByteArray(buf) = tup.value() else {
                 continue;
             };
 
@@ -87,14 +85,11 @@ impl Weather {
             let mut decoder = PbDecoder::new(buf);
             decoder.ignore_repeated_cap_err = true;
             if let Err(e) = self.data.decode(&mut decoder, buf.len()) {
-                crate::error!("Decode error: {:?}", e);
+                pebble_async::error!("Decode error of weather message");
             }
 
-            self.location_name = CString::new();
-            let _ = ufmt::uwrite!(&mut self.location_name, "{}", self.data.location_name);
-
-            if let Err(e) = self.save() {
-                crate::error!("Failed to save weather: {e:?}");
+            if self.save().is_err() {
+                pebble_async::error!("Failed to save weather");
             }
             return true;
         }

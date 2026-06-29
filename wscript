@@ -1,53 +1,84 @@
-#
-# This file is the default set of rules to compile a Pebble application.
-#
-# Feel free to customize this to your needs.
-#
 import os.path
-import os
-
-from waflib import Errors
-from waflib.Task import Task
-from waflib.TaskGen import feature, after_method
+import glob
+from waflib import Task, TaskGen
+from waflib.Tools.ccroot import stlink_task
 
 top = '.'
 out = 'build'
 
-RUST_TARGET = 'thumbv7m-pebble-eabi/release/libpebble_weather_graph.a'
-MESSAGE_KEYS_C = 'src/message_keys.auto.c'
-MESSAGE_KEYS_OBJ = 'src/message_keys.auto.o'
-MESSAGE_KEYS_LIB = 'src/libmessage_keys.auto.a'
+RUST_TARGETS = {
+    'emery': 'thumbv7m-single-core',
+}
 
 
-def _build_message_keys_lib(task):
-    cc = task.env.CC[0] if task.env.CC else 'arm-none-eabi-gcc'
-    ar = task.env.AR[0] if task.env.AR else 'arm-none-eabi-ar'
-    src = task.inputs[0].abspath()
-    obj = task.outputs[0].abspath()
-    lib = task.outputs[1].abspath()
-    task.exec_command([
-        cc, '-std=c99', '-mcpu=cortex-m3', '-mthumb', '-ffunction-sections',
-        '-fdata-sections', '-Os', '-c', src, '-o', obj,
-    ])
-    task.exec_command([ar, 'rcs', lib, obj])
+class cargo_staticlib(stlink_task):
+    always_run = True
+
+    def run(self):
+        env = dict(os.environ)
+        env['PEBBLE_INCLUDE_DIRS'] = self.cargo_include_dirs
+        env['PEBBLE_CFLAGS'] = self.cargo_cflags
+        env['RUSTFLAGS'] = self.cargo_rustflags
+        return self.exec_command(self.cargo_cmd, cwd=self.cargo_cwd, env=env)
+
+    def keyword(self):
+        return 'Compiling (cargo)'
 
 
-@feature('pebble_cprogram')
-@after_method('apply_link')
-def link_rust_staticlib(self):
-    try:
-        cargo_tg = self.bld.get_tgen_by_name(RUST_TARGET)
-    except Errors.WafError:
-        return
+@TaskGen.feature('cargo_staticlib')
+def process_cargo_staticlib(tg):
+    tsk = tg.create_task('cargo_staticlib')
+    tsk.inputs = list(tg.cargo_header_deps)
+    tsk.outputs = [tg.cargo_libnode]
+    tsk.cargo_cmd = tg.cargo_cmd
+    tsk.cargo_cwd = tg.cargo_cwd
+    tsk.cargo_include_dirs = tg.cargo_include_dirs
+    tsk.cargo_cflags = tg.cargo_cflags
+    tsk.cargo_rustflags = tg.cargo_rustflags
+    tg.link_task = tsk
+    tg.target = tg.cargo_libname
 
-    rust_lib = self.bld.bldnode.find_node(RUST_TARGET)
-    if rust_lib is None:
-        return
 
-    for task in cargo_tg.tasks:
-        self.link_task.set_run_after(task)
-    if rust_lib not in self.link_task.inputs:
-        self.link_task.inputs.append(rust_lib)
+def _declare_rust_staticlib(ctx, platform, rust_target, libname='pebble_weather_graph'):
+    rust_dir = ctx.path.find_node('.')
+    target_dir = ctx.bldnode.make_node('target/{}'.format(platform))
+    libnode = target_dir.make_node(
+        '{}/release/lib{}.a'.format(rust_target, libname))
+
+    include_dirs = [
+        os.path.join(ctx.env.PEBBLE_SDK_PLATFORM, 'include'),
+        os.path.join(ctx.env.PEBBLE_SDK_COMMON, 'include'),
+        ctx.bldnode.make_node(ctx.env.BUILD_DIR).abspath(),
+        ctx.bldnode.make_node('include').abspath(),
+    ]
+
+    header_deps = [
+        ctx.bldnode.make_node('include/message_keys.auto.h'),
+        ctx.bldnode.make_node(ctx.env.BUILD_DIR).make_node(
+            'src/resource_ids.auto.h'),
+    ]
+    
+    cargo_args = os.environ.get("EXTRA_CARGO_ARGS", "")
+    name = 'rust_{}'.format(platform)
+    ctx(
+        features='cargo_staticlib',
+        name=name,
+        cargo_libname=libname,
+        cargo_libnode=libnode,
+        cargo_header_deps=header_deps,
+        cargo_cwd=rust_dir.abspath(),
+        cargo_include_dirs=':'.join(include_dirs),
+        cargo_cflags=' '.join(ctx.env.CFLAGS),
+        # Needed or the built program will be wonky, seems to cause it to not call functions correctly?
+        cargo_rustflags='-C relocation-model=pic -C codegen-units=1 -C link-arg=--gc-sections -C link-arg=--build-id=sha1 -C link-arg=--emit-relocs -C debuginfo=2',
+        # The custom build target is needed so that rust assumes a single core and doesn't
+        # generate barrier instructions (which work on the emulator, but fails on hardware)
+        cargo_cmd=['cargo', 'build', '--release', '-p', 'pebble-weather-graph',
+                   '--target', rust_target + '.json',
+                   '-Zjson-target-spec',
+                   '--target-dir', target_dir.abspath()] + list(filter(lambda x: x, cargo_args.split(' '))),
+    )
+    return name
 
 
 def options(ctx):
@@ -55,64 +86,43 @@ def options(ctx):
 
 
 def configure(ctx):
-    """
-    This method is used to configure your build. ctx.load(`pebble_sdk`) automatically configures
-    a build for each valid platform in `targetPlatforms`. Platform-specific configuration: add your
-    change after calling ctx.load('pebble_sdk') and make sure to set the correct environment first.
-    Universal configuration: add your change prior to calling ctx.load('pebble_sdk').
-    """
     ctx.load('pebble_sdk')
-    ctx.load('clang_compilation_database', tooldir="./tools")
 
 
 def build(ctx):
     ctx.exec_command('npm run build')
-
     ctx.load('pebble_sdk')
 
-    message_keys_c = ctx.path.get_bld().make_node(MESSAGE_KEYS_C)
-    message_keys_obj = ctx.path.get_bld().make_node(MESSAGE_KEYS_OBJ)
-    message_keys_lib = ctx.path.get_bld().make_node(MESSAGE_KEYS_LIB)
-    ctx(
-        rule=_build_message_keys_lib,
-        source=message_keys_c,
-        target=[message_keys_obj, message_keys_lib],
-        env=ctx.all_envs[ctx.env.TARGET_PLATFORMS[0]],
-    )
-
-    message_keys_lib_dir = message_keys_lib.parent.abspath()
-
-    rust_sources = (
-        ['Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'rust-toolchain.toml', 'thumbv7m-pebble-eabi.json',
-         'gravel/gravel/Cargo.toml', 'gravel/gravel-sys/Cargo.toml']
-        + ctx.path.ant_glob('src/**/*.rs')
-        + ctx.path.ant_glob('gravel/gravel/src/**/*.rs')
-        + ctx.path.ant_glob('gravel/gravel-sys/src/**/*.rs')
-    )
-    cargo_args = os.environ.get("EXTRA_CARGO_ARGS", "")
-    rust_target = RUST_TARGET
-    ctx(
-        rule=f'cargo build --release --target ../thumbv7m-pebble-eabi.json -Zjson-target-spec --target-dir . {cargo_args}',
-        source=rust_sources + [message_keys_lib],
-        target=rust_target,
-        always=True,
-    )
-
+    build_worker = os.path.exists('worker_src')
     binaries = []
 
     cached_env = ctx.env
     for platform in ctx.env.TARGET_PLATFORMS:
         ctx.env = ctx.all_envs[platform]
+
+        # silence some warnings
+        ctx.env.LINKFLAGS += ["-z", "noexecstack"]
+        ctx.env.LINKFLAGS += ["-Wl,--no-warn-rwx-segments"]
+
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
-        ctx.env.LINKFLAGS += ['-z', 'noexecstack']
-        ctx.env.LINKFLAGS += ['-Wl,--no-warn-rwx-segments']
 
-        app_elf = ctx.pbl_program(
-            target=f"{ctx.env.BUILD_DIR}/pebble-app.elf",
-        )
+        rust_kw = {}
+        rust_target = RUST_TARGETS.get(platform)
+        if rust_target:
+            rust_kw['use'] = [_declare_rust_staticlib(ctx, platform, rust_target)]
 
-        binaries.append({'platform': platform, 'app_elf': app_elf.target})
+        ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf,
+                      bin_type='app', **rust_kw)
+
+        if build_worker:
+            worker_elf = '{}/pebble-worker.elf'.format(ctx.env.BUILD_DIR)
+            binaries.append({'platform': platform, 'app_elf': app_elf, 'worker_elf': worker_elf})
+            ctx.pbl_build(source=ctx.path.ant_glob('worker_src/c/**/*.c'),
+                          target=worker_elf,
+                          bin_type='worker', **rust_kw)
+        else:
+            binaries.append({'platform': platform, 'app_elf': app_elf})
     ctx.env = cached_env
 
     ctx.set_group('bundle')
@@ -121,18 +131,3 @@ def build(ctx):
                                          'src/pkjs/**/*.json',
                                          'src/common/**/*.js']),
                    js_entry_file='src/ts-build/index.js')
-
-orig_exec_command = Task.exec_command
-
-def custom_exec_command(self, cmd, **kw):
-    if isinstance(cmd, list) and len(cmd) > 0 and ('gcc' in cmd[0] or 'cc' in cmd[0]):
-        new_cmd = []
-        for arg in cmd:
-            if arg.startswith('-I') and ('sdk' in arg.lower() or 'pebble' in arg.lower()):
-                new_cmd.append('-isystem' + arg[2:])
-            else:
-                new_cmd.append(arg)
-        cmd = new_cmd
-    return orig_exec_command(self, cmd, **kw)
-
-Task.exec_command = custom_exec_command
