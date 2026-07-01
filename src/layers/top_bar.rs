@@ -6,7 +6,7 @@ use pebble_async::{
     colour::GColor,
     events,
     graphics_context::GContext,
-    layers::{Layer, LayerMut},
+    layers::Layer,
 };
 
 fn draw_bluetooth_icon(ctx: &mut GContext) {

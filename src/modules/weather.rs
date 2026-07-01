@@ -84,7 +84,7 @@ impl Weather {
 
             let mut decoder = PbDecoder::new(buf);
             decoder.ignore_repeated_cap_err = true;
-            if let Err(e) = self.data.decode(&mut decoder, buf.len()) {
+            if let Err(_e) = self.data.decode(&mut decoder, buf.len()) {
                 pebble_async::error!("Decode error of weather message");
             }
 

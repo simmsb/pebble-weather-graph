@@ -1,19 +1,18 @@
 use core::{
-    cell::{RefCell, RefMut},
-    ffi::CStr,
+    cell::RefCell,
     time::Duration,
 };
 
 use futures::StreamExt as _;
 use heapless::CString;
 use pebble_async::{
-    app_message::{AppMessages, AppMessagesHandle},
+    app_message::AppMessagesHandle,
     bindings::{GPoint, GRect, GSize, GTextAlignment, GTextOverflowMode, TimeUnits},
     colour::GColor,
     events,
     font::Font,
     graphics_context::GContext,
-    layers::{Layer, LayerMut},
+    layers::Layer,
     time::Timestamp,
 };
 
@@ -345,7 +344,7 @@ fn draw_midnight_marker_and_dates(
         ),
         font,
         GRect {
-            origin: GPoint { x: right_x, y: y },
+            origin: GPoint { x: right_x, y },
             size: GSize { w: width, h: 16 },
         },
         GTextOverflowMode::GTextOverflowModeFill,
@@ -513,10 +512,10 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
             .max(slot_hr.cloud_cover)
             .max(next_slot_hr.cloud_cover);
 
-        draw_sun_line(ctx, &bounds, x_i16, interp.sun_level, max_temp, max_cloud);
+        draw_sun_line(ctx, bounds, x_i16, interp.sun_level, max_temp, max_cloud);
         draw_rain_line(
             ctx,
-            &bounds,
+            bounds,
             x_i16,
             interp_hr.rain_chance,
             max_temp,
@@ -524,7 +523,7 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
         );
 
         if x & 1 != 0 {
-            draw_cloud_line(ctx, &bounds, x_i16, interp_hr.cloud_cover);
+            draw_cloud_line(ctx, bounds, x_i16, interp_hr.cloud_cover);
         }
 
         if !is_doubled && line_is_on_midnight(now, segment_idx) {
@@ -537,7 +536,7 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
             if day_idx < weather_data.daily.len() && next_day_idx < weather_data.daily.len() {
                 draw_midnight_marker_and_dates(
                     ctx,
-                    &bounds,
+                    bounds,
                     font,
                     x_i16,
                     interp.temperature,
@@ -548,17 +547,17 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
                 drawn_midnight = true;
             }
         } else {
-            draw_is_day(ctx, &bounds, x_i16, interp.is_day);
+            draw_is_day(ctx, bounds, x_i16, interp.is_day);
         }
 
         if x & 1 != 0 {
-            draw_temp_line(ctx, &bounds, x_i16, interp.temperature);
+            draw_temp_line(ctx, bounds, x_i16, interp.temperature);
         }
 
         if x > 0 {
             draw_temp_top_line(
                 ctx,
-                &bounds,
+                bounds,
                 prev_x,
                 x_i16,
                 prev.temperature,
@@ -571,7 +570,7 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
         prev_hr = interp_hr;
     }
 
-    draw_current_infos(ctx, font, &bounds, weather);
+    draw_current_infos(ctx, font, bounds, weather);
 }
 
 pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandle<'_>) {
@@ -585,7 +584,7 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandl
     pin_init::stack_pin_init!(let container = container
                               .with_update_proc(|layer, mut ctx| {
                                   let bounds = layer.bounds();
-                                  update_proc(&mut ctx, font, &bounds, &*weather.borrow());
+                                  update_proc(&mut ctx, font, &bounds, &weather.borrow());
                               })
     );
 

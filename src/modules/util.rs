@@ -1,7 +1,4 @@
-use core::ffi::CStr;
-use core::fmt::{self, Write};
 
-use heapless::{CString, LenType};
 
 #[macro_export]
 macro_rules! ufmt_cstr {

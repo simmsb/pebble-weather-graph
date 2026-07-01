@@ -1,4 +1,4 @@
-use core::cell::{Cell, RefCell};
+use core::cell::Cell;
 
 use futures::StreamExt as _;
 use heapless::CString;
@@ -11,7 +11,7 @@ use pebble_async::{
     events,
     font::Font,
     graphics_context::GContext,
-    layers::{Layer, LayerMut, TextLayer},
+    layers::{Layer, TextLayer},
 };
 
 use crate::ufmt_cstr;

@@ -1,12 +1,11 @@
 use core::ffi::CStr;
 
 use futures::StreamExt as _;
-use heapless::CString;
 use pebble_async::{
-    bindings::{GRect, GTextAlignment, TimeUnits},
+    bindings::{GTextAlignment, TimeUnits},
     colour, events,
     font::Font,
-    layers::{Layer, LayerMut, LayerRef, TextLayer},
+    layers::{Layer, TextLayer},
     resources::Resource,
 };
 
