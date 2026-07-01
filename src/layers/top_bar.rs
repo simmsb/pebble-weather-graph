@@ -81,7 +81,7 @@ fn draw_battery(ctx: &mut GContext, bounds: &GRect, state: &BatteryChargeState) 
 
     ctx.set_stroke_width(1);
     ctx.set_antialiased(false);
-    ctx.set_stroke_colour(GColor::GREEN);
+    ctx.set_stroke_colour(GColor::BLACK);
     if state.is_charging {
         ctx.set_stroke_colour(GColor::GREEN);
     }
