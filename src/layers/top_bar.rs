@@ -1,7 +1,7 @@
 use core::cell::Cell;
 
 use futures::StreamExt;
-use pebble_async::{
+use bordstein::{
     bindings::{BatteryChargeState, GPoint, GRect},
     colour::GColor,
     events,

@@ -22,37 +22,26 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 }
 
-use pebble_async::{bindings::GRect, window};
+use bordstein::{bindings::GRect, window};
 
-pebble_async::main!(async_main);
-
-// fn init(s: embassy_executor::Spawner) {
-//     let token = async_main(unsafe { pebble_async::PebbleServices::steal() }, s).expect("Task spawn failed?");
-//     s.spawn(token);
-// }
-// #[unsafe(no_mangle)]
-// pub extern "C" fn main() {
-//     pebble_async::debug!("Starting up");
-//     pebble_async::executor::init();
-//     pebble_async::executor::run(init);
-// }
+bordstein::main!(async_main);
 
 #[embassy_executor::task]
-async fn async_main(services: pebble_async::PebbleServices, spawner: embassy_executor::Spawner) {
+async fn async_main(services: bordstein::PebbleServices, spawner: embassy_executor::Spawner) {
     async_main_(services, spawner).await;
 }
 
 async fn async_main_(
-    mut services: pebble_async::PebbleServices,
+    mut services: bordstein::PebbleServices,
     _spawner: embassy_executor::Spawner,
 ) {
-    pebble_async::info!("Async main called!");
+    bordstein::info!("Async main called!");
     window::with_window(async |mut h| {
         pin_init::stack_pin_init!(let app_messages = services.app_messages.open(2500, 64));
 
         let root_layer = h.root_layer();
         let bounds = root_layer.bounds();
-        pebble_async::info!("Window bounds: {:?}", bounds);
+        bordstein::info!("Window bounds: {:?}", bounds);
 
         let w = bounds.size.w;
         let mut y = 0;

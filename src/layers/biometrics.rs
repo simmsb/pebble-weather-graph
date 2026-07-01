@@ -2,7 +2,7 @@ use core::cell::Cell;
 
 use futures::StreamExt as _;
 use heapless::CString;
-use pebble_async::{
+use bordstein::{
     IsLayer as _,
     bindings::{
         GAlign, GCornerMask, GRect, GSize, GTextAlignment, GTextOverflowMode, HealthMetric,
@@ -22,7 +22,7 @@ const LABEL_LEN: usize = 10;
 
 pub async fn biometrics_layer(container: Layer<'_>) {
     let bounds = container.bounds();
-    let font = Font::get_system_font(pebble_async::bindings::FONT_KEY_GOTHIC_18);
+    let font = Font::get_system_font(bordstein::bindings::FONT_KEY_GOTHIC_18);
 
     let mut hr_layer = container.new_child::<TextLayer>(bounds).unwrap();
     hr_layer.set_font(font);

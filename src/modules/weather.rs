@@ -2,7 +2,7 @@ use core::{mem::MaybeUninit, u32};
 
 use heapless::String;
 use micropb::{MessageDecode, PbDecoder};
-use pebble_async::{bindings, dictionary::{DictionaryIterator, TupleValue}, storage};
+use bordstein::{bindings, dictionary::{DictionaryIterator, TupleValue}, storage};
 
 pub const WEATHER_NUM_DAYS: usize = 2;
 pub const TL_WEATHER_SEGS_PER_HOUR: usize = 4;
@@ -35,7 +35,7 @@ impl Weather {
             core::mem::transmute(self)
         };
         if Weather::try_load_from_storage(s).is_err() {
-            pebble_async::info!("No saved weather or decode failed");
+            bordstein::info!("No saved weather or decode failed");
         }
     }
 
@@ -73,7 +73,7 @@ impl Weather {
 
     pub fn update_from_message(&mut self, reader: &mut DictionaryIterator) -> bool {
         for tup in reader {
-            if tup.key() != pebble_async::messages::WEATHER_UPDATE() {
+            if tup.key() != bordstein::messages::WEATHER_UPDATE() {
                 continue;
             }
             let TupleValue::ByteArray(buf) = tup.value() else {
@@ -85,11 +85,11 @@ impl Weather {
             let mut decoder = PbDecoder::new(buf);
             decoder.ignore_repeated_cap_err = true;
             if let Err(_e) = self.data.decode(&mut decoder, buf.len()) {
-                pebble_async::error!("Decode error of weather message");
+                bordstein::error!("Decode error of weather message");
             }
 
             if self.save().is_err() {
-                pebble_async::error!("Failed to save weather");
+                bordstein::error!("Failed to save weather");
             }
             return true;
         }

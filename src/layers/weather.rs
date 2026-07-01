@@ -5,7 +5,7 @@ use core::{
 
 use futures::StreamExt as _;
 use heapless::CString;
-use pebble_async::{
+use bordstein::{
     app_message::AppMessagesHandle,
     bindings::{GPoint, GRect, GSize, GTextAlignment, GTextOverflowMode, TimeUnits},
     colour::GColor,
@@ -450,13 +450,13 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
     let mut prev_hr = WeatherHourly::default();
     let mut prev_x: i16 = 0;
 
-    pebble_async::info!(
+    bordstein::info!(
         "Drawing weather, offset: {}, report_start: {}",
         offset_15,
         weather_data.report_start
     );
 
-    pebble_async::debug!(
+    bordstein::debug!(
         "Weather data sizes: segs: {}, hours: {}, days: {}",
         weather_data.segments.len(),
         weather_data.hourly_segments.len(),
@@ -579,7 +579,7 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandl
     let weather: RefCell<&'static mut Weather> = RefCell::new(weather);
 
     let font =
-        pebble_async::font::Font::get_system_font(pebble_async::bindings::FONT_KEY_GOTHIC_14);
+        bordstein::font::Font::get_system_font(bordstein::bindings::FONT_KEY_GOTHIC_14);
 
     pin_init::stack_pin_init!(let container = container
                               .with_update_proc(|layer, mut ctx| {
@@ -601,13 +601,13 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandl
     if Timestamp::from_secs(weather.borrow().data.report_start as i32)
         < (now - Duration::from_hours(1))
     {
-        pebble_async::info!("No saved weather or weather out of date, requesting new");
-        app_messages.send(|d| d.u8(pebble_async::messages::WEATHER_REQUEST(), 1));
+        bordstein::info!("No saved weather or weather out of date, requesting new");
+        app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
     }
 
     while let Some((dt, unit)) = tick_stream.next().await {
         if unit & TimeUnits::HOUR_UNIT != TimeUnits(0) {
-            app_messages.send(|d| d.u8(pebble_async::messages::WEATHER_REQUEST(), 1));
+            app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
         } else if unit & TimeUnits::MINUTE_UNIT != TimeUnits(0) && (dt.mins % 15) == 0 {
             container.mark_dirty();
         }

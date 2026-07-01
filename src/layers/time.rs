@@ -1,7 +1,7 @@
 use core::ffi::CStr;
 
 use futures::StreamExt as _;
-use pebble_async::{
+use bordstein::{
     bindings::{GTextAlignment, TimeUnits},
     colour, events,
     font::Font,
@@ -10,7 +10,7 @@ use pebble_async::{
 };
 
 pub async fn time_layer(container: Layer<'_>) {
-    let resource = Resource::get_handle(pebble_async::bindings::RESOURCE_ID_LM_MONO_48).unwrap();
+    let resource = Resource::get_handle(bordstein::bindings::RESOURCE_ID_LM_MONO_48).unwrap();
     let font = Font::load_custom_font(resource);
 
     let mut text_layer = container.new_child::<TextLayer>(container.bounds()).unwrap();
@@ -24,7 +24,7 @@ pub async fn time_layer(container: Layer<'_>) {
     loop {
         let mut s = [0u8; 16];
         unsafe {
-            pebble_async::bindings::clock_copy_time_string(s.as_mut_ptr(), 15);
+            bordstein::bindings::clock_copy_time_string(s.as_mut_ptr(), 15);
         }
         let cstr = CStr::from_bytes_until_nul(&s).unwrap();
 

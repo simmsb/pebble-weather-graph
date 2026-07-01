@@ -44,6 +44,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 
 [[package]]
+name = "bordstein"
+version = "0.1.0"
+source = "git+https://github.com/simmsb/bordstein#5c1f55de37a8019d382d474d019923b4cd97d417"
+dependencies = [
+ "bindgen",
+ "cordyceps",
+ "doxygen-bindgen",
+ "doxygen-rs",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-time-driver",
+ "embassy-time-queue-utils",
+ "futures",
+ "heapless",
+ "pin-init",
+ "ufmt",
+ "ufmt-macros",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -181,7 +203,7 @@ checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 [[package]]
 name = "embassy-executor"
 version = "0.10.0"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "cordyceps",
  "critical-section",
@@ -194,7 +216,7 @@ dependencies = [
 [[package]]
 name = "embassy-executor-macros"
 version = "0.8.0"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -205,17 +227,17 @@ dependencies = [
 [[package]]
 name = "embassy-executor-timer-queue"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 
 [[package]]
 name = "embassy-futures"
 version = "0.1.2"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 
 [[package]]
 name = "embassy-sync"
 version = "0.8.0"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -228,7 +250,7 @@ dependencies = [
 [[package]]
 name = "embassy-time"
 version = "0.5.1"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -243,7 +265,7 @@ dependencies = [
 [[package]]
 name = "embassy-time-driver"
 version = "0.2.2"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "document-features",
 ]
@@ -251,7 +273,7 @@ dependencies = [
 [[package]]
 name = "embassy-time-queue-utils"
 version = "0.3.2"
-source = "git+https://github.com/embassy-rs/embassy#a5387ade8cc03915cd374b86a49335a3fe2177ff"
+source = "git+https://github.com/embassy-rs/embassy#56b52e66b59069eeb0ceeed2c7c096ee703413fe"
 dependencies = [
  "embassy-executor-timer-queue",
  "heapless",
@@ -633,31 +655,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "pebble-async"
-version = "0.1.0"
-dependencies = [
- "bindgen",
- "cordyceps",
- "critical-section",
- "doxygen-bindgen",
- "doxygen-rs",
- "embassy-executor",
- "embassy-futures",
- "embassy-sync",
- "embassy-time",
- "embassy-time-driver",
- "embassy-time-queue-utils",
- "futures",
- "heapless",
- "pin-init",
- "portable-atomic",
- "ufmt",
-]
-
-[[package]]
 name = "pebble-weather-graph"
 version = "1.0.0"
 dependencies = [
+ "bordstein",
  "embassy-executor",
  "embassy-futures",
  "futures",
@@ -665,7 +666,6 @@ dependencies = [
  "micropb",
  "micropb-gen",
  "paste",
- "pebble-async",
  "pin-init",
  "static_cell",
  "ufmt",
