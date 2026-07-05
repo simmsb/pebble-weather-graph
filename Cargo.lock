@@ -46,7 +46,7 @@ checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 [[package]]
 name = "bordstein"
 version = "0.1.0"
-source = "git+https://github.com/simmsb/bordstein#5c1f55de37a8019d382d474d019923b4cd97d417"
+source = "git+https://github.com/simmsb/bordstein#c1b90633b212cda77bef434a38051388b85a069e"
 dependencies = [
  "bindgen",
  "cordyceps",
@@ -825,9 +825,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rustc-hash"
-version = "2.1.2"
+version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
+checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "rustc_version"

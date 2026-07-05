@@ -2,17 +2,7 @@ use core::cell::Cell;
 
 use futures::StreamExt as _;
 use heapless::CString;
-use bordstein::{
-    IsLayer as _,
-    bindings::{
-        GAlign, GCornerMask, GRect, GSize, GTextAlignment, GTextOverflowMode, HealthMetric,
-    },
-    colour::{self, GColor},
-    events,
-    font::Font,
-    graphics_context::GContext,
-    layers::{Layer, TextLayer},
-};
+use bordstein::{app_message::OpenAppMessages, prelude::*, bindings::{TimeUnits, GTextAlignment, GSize, GPoint, GTextOverflowMode, GRect, GColor, HealthMetric, GCornerMask, GAlign}};
 
 use crate::ufmt_cstr;
 
@@ -26,13 +16,13 @@ pub async fn biometrics_layer(container: Layer<'_>) {
 
     let mut hr_layer = container.new_child::<TextLayer>(bounds).unwrap();
     hr_layer.set_font(font);
-    hr_layer.set_background_colour(colour::GColor::CLEAR);
-    hr_layer.set_text_colour(colour::GColor::WHITE);
+    hr_layer.set_background_colour(GColor::CLEAR);
+    hr_layer.set_text_colour(GColor::WHITE);
 
     let mut steps_layer = container.new_child::<TextLayer>(bounds).unwrap();
     steps_layer.set_font(font);
-    steps_layer.set_background_colour(colour::GColor::CLEAR);
-    steps_layer.set_text_colour(colour::GColor::WHITE);
+    steps_layer.set_background_colour(GColor::CLEAR);
+    steps_layer.set_text_colour(GColor::WHITE);
 
     let aligned = Cell::new(GRect::new(0, 0, 0, 0));
 
@@ -43,21 +33,20 @@ pub async fn biometrics_layer(container: Layer<'_>) {
         ctx.fill_rect(aligned.get(), 6, GCornerMask::GCornersAll);
     }));
 
-    pin_init::stack_pin_init!(let health_stream = events::health::stream());
+    pin_init::stack_pin_init!(let health_stream = HealthService::stream());
 
     loop {
         let mut hr_buf = CString::<12>::new();
         let mut steps_buf = CString::<12>::new();
 
-        let hr = events::health::health_service_peek_current_value(
+        let hr = HealthService::peek_current_value(
             HealthMetric::HealthMetricHeartRateBPM,
         );
-        let steps = events::health::health_service_today(HealthMetric::HealthMetricStepCount);
+        let steps = HealthService::today(HealthMetric::HealthMetricStepCount);
 
         let hr_text = ufmt_cstr!(&mut hr_buf, "H {} / ", hr);
         let steps_text = ufmt_cstr!(&mut steps_buf, "S {}", steps);
 
-        let bounds = container.bounds();
         let hr_size = GContext::get_text_content_size(
             hr_text,
             font,

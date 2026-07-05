@@ -1,20 +1,12 @@
-use core::{
-    cell::RefCell,
-    time::Duration,
-};
+use core::{cell::RefCell, time::Duration};
 
+use bordstein::{
+    app_message::OpenAppMessages,
+    bindings::{GColor, GPoint, GRect, GSize, GTextAlignment, GTextOverflowMode, TimeUnits},
+    prelude::*,
+};
 use futures::StreamExt as _;
 use heapless::CString;
-use bordstein::{
-    app_message::AppMessagesHandle,
-    bindings::{GPoint, GRect, GSize, GTextAlignment, GTextOverflowMode, TimeUnits},
-    colour::GColor,
-    events,
-    font::Font,
-    graphics_context::GContext,
-    layers::Layer,
-    time::Timestamp,
-};
 
 use crate::{
     messages::{WeatherDaily, WeatherHourly, WeatherSegment},
@@ -573,13 +565,12 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
     draw_current_infos(ctx, font, bounds, weather);
 }
 
-pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandle<'_>) {
+pub async fn weather_layer(container: Layer<'_>, app_messages: &OpenAppMessages<'_>) {
     let weather = WEATHER.take();
     weather.init();
-    let weather: RefCell<&'static mut Weather> = RefCell::new(weather);
+    let weather = RefCell::new(weather);
 
-    let font =
-        bordstein::font::Font::get_system_font(bordstein::bindings::FONT_KEY_GOTHIC_14);
+    let font = bordstein::font::Font::get_system_font(bordstein::bindings::FONT_KEY_GOTHIC_14);
 
     pin_init::stack_pin_init!(let container = container
                               .with_update_proc(|layer, mut ctx| {
@@ -595,7 +586,7 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &AppMessagesHandl
         }
     }));
 
-    pin_init::stack_pin_init!(let tick_stream = events::tick::stream(TimeUnits::MINUTE_UNIT | TimeUnits::HOUR_UNIT));
+    pin_init::stack_pin_init!(let tick_stream = TickService::stream(TimeUnits::MINUTE_UNIT | TimeUnits::HOUR_UNIT));
 
     let now = Timestamp::now();
     if Timestamp::from_secs(weather.borrow().data.report_start as i32)

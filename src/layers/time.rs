@@ -1,13 +1,7 @@
 use core::ffi::CStr;
 
 use futures::StreamExt as _;
-use bordstein::{
-    bindings::{GTextAlignment, TimeUnits},
-    colour, events,
-    font::Font,
-    layers::{Layer, TextLayer},
-    resources::Resource,
-};
+use bordstein::{app_message::OpenAppMessages, prelude::*, bindings::{TimeUnits, GTextAlignment, GSize, GPoint, GTextOverflowMode, GRect, GColor}};
 
 pub async fn time_layer(container: Layer<'_>) {
     let resource = Resource::get_handle(bordstein::bindings::RESOURCE_ID_LM_MONO_48).unwrap();
@@ -15,11 +9,11 @@ pub async fn time_layer(container: Layer<'_>) {
 
     let mut text_layer = container.new_child::<TextLayer>(container.bounds()).unwrap();
     text_layer.set_font(font);
-    text_layer.set_background_colour(colour::GColor::CLEAR);
-    text_layer.set_text_colour(colour::GColor::BLACK);
+    text_layer.set_background_colour(GColor::CLEAR);
+    text_layer.set_text_colour(GColor::BLACK);
     text_layer.set_text_alignment(GTextAlignment::GTextAlignmentCenter);
 
-    pin_init::stack_pin_init!(let tick_stream = events::tick::stream(TimeUnits::MINUTE_UNIT));
+    pin_init::stack_pin_init!(let tick_stream = TickService::stream(TimeUnits::MINUTE_UNIT));
 
     loop {
         let mut s = [0u8; 16];

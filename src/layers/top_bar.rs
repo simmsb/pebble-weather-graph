@@ -1,13 +1,7 @@
 use core::cell::Cell;
 
 use futures::StreamExt;
-use bordstein::{
-    bindings::{BatteryChargeState, GPoint, GRect},
-    colour::GColor,
-    events,
-    graphics_context::GContext,
-    layers::Layer,
-};
+use bordstein::{app_message::OpenAppMessages, prelude::*, bindings::{TimeUnits, GTextAlignment, GSize, GPoint, GTextOverflowMode, GRect, GColor, BatteryChargeState}};
 
 fn draw_bluetooth_icon(ctx: &mut GContext) {
     ctx.set_stroke_colour(GColor::BLACK);
@@ -120,8 +114,8 @@ fn draw_battery(ctx: &mut GContext, bounds: &GRect, state: &BatteryChargeState) 
 
 pub async fn top_bar_layer(container: Layer<'_>) {
     let bounds = container.bounds();
-    let bluetooth_on = Cell::new(events::connection::peek_pebble_app_connection());
-    let battery_state = Cell::new(events::battery_state::battery_service_peek_current_value());
+    let bluetooth_on = Cell::new(ConnectionService::peek_pebble_app_connection());
+    let battery_state = Cell::new(BatteryService::peek_current_value());
 
     pin_init::stack_pin_init!(let container = container
                               .with_update_proc(|_layer, mut ctx| {
@@ -136,8 +130,8 @@ pub async fn top_bar_layer(container: Layer<'_>) {
                               })
     );
 
-    pin_init::stack_pin_init!(let battery_events = events::battery_state::stream());
-    pin_init::stack_pin_init!(let connection_events = events::connection::stream());
+    pin_init::stack_pin_init!(let battery_events = BatteryService::stream());
+    pin_init::stack_pin_init!(let connection_events = ConnectionService::stream());
 
     loop {
         container.mark_dirty();

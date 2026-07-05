@@ -20,7 +20,7 @@
     "build": "pkts build"
   },
   "pebble": {
-    "displayName": "pebble-weather-graph",
+    "displayName": "Pebble weather graph",
     "uuid": "41ff9e37-899b-4211-9056-f353d2d58dd2",
     "sdkVersion": "3",
     "enableMultiJS": true,
