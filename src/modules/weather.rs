@@ -1,4 +1,4 @@
-use core::{mem::MaybeUninit, u32};
+use core::mem::MaybeUninit;
 
 use heapless::String;
 use micropb::{MessageDecode, PbDecoder};

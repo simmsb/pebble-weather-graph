@@ -1,7 +1,7 @@
 use core::ffi::CStr;
 
 use futures::StreamExt as _;
-use bordstein::{app_message::OpenAppMessages, prelude::*, bindings::{TimeUnits, GTextAlignment, GSize, GPoint, GTextOverflowMode, GRect, GColor}};
+use bordstein::{prelude::*, bindings::{TimeUnits, GTextAlignment, GColor}};
 
 pub async fn time_layer(container: Layer<'_>) {
     let resource = Resource::get_handle(bordstein::bindings::RESOURCE_ID_LM_MONO_48).unwrap();

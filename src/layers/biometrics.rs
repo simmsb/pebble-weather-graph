@@ -2,13 +2,11 @@ use core::cell::Cell;
 
 use futures::StreamExt as _;
 use heapless::CString;
-use bordstein::{app_message::OpenAppMessages, prelude::*, bindings::{TimeUnits, GTextAlignment, GSize, GPoint, GTextOverflowMode, GRect, GColor, HealthMetric, GCornerMask, GAlign}};
+use bordstein::{prelude::*, bindings::{GTextAlignment, GSize, GTextOverflowMode, GRect, GColor, HealthMetric, GCornerMask, GAlign}};
 
 use crate::ufmt_cstr;
 
 const BORDER_H_PAD: i16 = 5;
-const FONT_H: i16 = 18;
-const LABEL_LEN: usize = 10;
 
 pub async fn biometrics_layer(container: Layer<'_>) {
     let bounds = container.bounds();
@@ -64,6 +62,8 @@ pub async fn biometrics_layer(container: Layer<'_>) {
 
         let total_width = hr_size.w + steps_size.w + 2 * BORDER_H_PAD;
 
+        bordstein::debug!("Biometrics width: {}", total_width);
+
         aligned.set(GRect::new(0, 0, total_width, bounds.size.h).align(
             &bounds,
             GAlign::GAlignCenter,
@@ -74,7 +74,7 @@ pub async fn biometrics_layer(container: Layer<'_>) {
             hr_size.with_origin(aligned.get().origin.offset(GSize::new(BORDER_H_PAD, -3))),
         );
         steps_layer.layer_mut().set_frame(
-            hr_size.with_origin(
+            steps_size.with_origin(
                 aligned
                     .get()
                     .origin
