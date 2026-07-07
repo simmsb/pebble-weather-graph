@@ -27,6 +27,8 @@
 
     PEBBLE_EMULATOR = "emery";
 
+    PEBBLE_BUILD_DIR = "${config.devenv.root}/build";
+
     # needed on darwin, might need an equivalent on linux?
     # needed so that @rpath/libLLVM.dylib resolves
     # DYLD_FALLBACK_LIBRARY_PATH="${config.languages.rust.toolchainPackage}/lib";
@@ -41,10 +43,10 @@
 
   unsetEnvVars = ["CC" "CC_FOR_BUILD"];
 
-  # languages.rust = {
-  #   enable = true;
-  #   channel = "nightly";
-  #   targets = [ "thumbv7m-none-eabi" ];
-  #   components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src" ];
-  # };
+  languages.rust = {
+    enable = true;
+    channel = "nightly";
+    targets = [ "thumbv7m-none-eabi" ];
+    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src" ];
+  };
 }
