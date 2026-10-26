@@ -580,6 +580,7 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &OpenAppMessages<
     );
 
     pin_init::stack_pin_init!(let app_message_handle = app_messages.listen_received(|dict| {
+        bordstein::info!("Received weather update");
         let mut weather = weather.borrow_mut();
         if weather.update_from_message(&mut dict.iter()) {
             container.mark_dirty();

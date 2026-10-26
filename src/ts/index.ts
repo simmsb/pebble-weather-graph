@@ -53,20 +53,27 @@ interface WeatherCache {
     locationName: string;
 }
 
-console.log = function(...args) {
-    const formattedArgs = args.map(arg => {
-        if (typeof arg === 'object' && arg !== null) {
-            try {
-                return JSON.stringify(arg, null, 2);
-            } catch (err) {
-                return '[Circular or Unstringifiable Object]';
-            }
-        }
-        return arg;
-    });
+const shouldLog = false;
 
-    originalLog.apply(console, formattedArgs);
-};
+if shouldLog {
+    console.log = function(...args) {
+        const formattedArgs = args.map(arg => {
+            if (typeof arg === 'object' && arg !== null) {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch (err) {
+                    return '[Circular or Unstringifiable Object]';
+                }
+            }
+            return arg;
+        });
+
+        originalLog.apply(console, formattedArgs);
+    };
+} else {
+    console.log = function(...args) {};
+}
+
 function readCache(): WeatherCache | null {
     try {
         var raw = localStorage.getItem(CACHE_KEY);
@@ -173,6 +180,35 @@ function transpose<K extends keyof any, T>(o: Record<K, T[]>): Record<K, T>[] {
     });
 }
 
+function assertIsError(e: unknown): asserts e is Error {
+    if (!(e instanceof Error)) {
+        throw new Error(`Unknown error type: ${e} (${typeof e})`);
+    }
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+    let resp;
+    try {
+        resp = await fetch(url);
+    } catch (err) {
+        assertIsError(err);
+        console.log(`Failed to fetch ${url}: ${err.name} ${err.message}`);
+        throw err;
+    }
+
+    let parsed: T;
+    try {
+        parsed = await resp.json();
+    } catch (err) {
+        assertIsError(err);
+        console.log(`Failed to parse response of ${url}: ${err.name} ${err.message}`);
+        console.log(resp);
+        throw err;
+    }
+
+    return parsed;
+}
+
 async function fetchAndSend(lat: number, lon: number) {
     var weatherUrl = WEATHER_BASE_URL +
         '?latitude=' + lat +
@@ -184,15 +220,15 @@ async function fetchAndSend(lat: number, lon: number) {
         '&forecast_days=3' +
         '&timeformat=unixtime' +
         '&timezone=UTC';
-    const weatherPromise = fetch(weatherUrl);
+    const weatherPromise = fetchJson<types.MeteoResponse>(weatherUrl);
 
     const geocodeUrl = GEOCODE_BASE_URL + '?f=json&langCode=EN&location=' + lon + ',' + lat;
-    const geocodePromise = fetch(geocodeUrl);
+    const geocodePromise = fetchJson<types.GeocodeResponse>(geocodeUrl);
 
 
-    const wr: types.MeteoResponse = await (await weatherPromise).json();
+    const wr: types.MeteoResponse = await weatherPromise;
 
-    const gr: types.GeocodeResponse = await (await geocodePromise).json();
+    const gr: types.GeocodeResponse = await geocodePromise;
     var addr = gr && gr.address;
     const locationName = (addr && (addr.City || addr.ShortLabel)) || 'Unknown';
 
@@ -214,6 +250,7 @@ async function buildAndSend(weather: types.MeteoResponse, locationName: string) 
  * and call fetchAndSend.
  */
 async function getWeather() {
+    console.log("Getting weather");
     // Check cache first
     var cache = readCache();
     if (cache && cache.expiresAt > Date.now()) {
@@ -222,20 +259,44 @@ async function getWeather() {
         return;
     }
 
-    const location = await new Promise<GeolocationCoordinates>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-            function(pos) {
-                console.log("Got position: " + pos.coords.latitude + " " + pos.coords.longitude);
-                resolve(pos.coords);
-            },
-            function(err) {
-                reject('geolocation error: ' + err.message);
-            },
-            { timeout: 15000, maximumAge: 300000 }
-        );
-    });
+    console.log("Getting location");
 
-    await fetchAndSend(location.latitude, location.longitude);
+    const retries = 5;
+    let locErr = undefined;
+    for (let n = 0; n < retries; n++) {
+        let location;
+        try {
+            location = await new Promise<GeolocationCoordinates>((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        console.log("Got position: " + pos.coords.latitude + " " + pos.coords.longitude);
+                        resolve(pos.coords);
+                    },
+                    function(err) {
+                        console.log("Geolocation error: " + err.message);
+                        reject('geolocation error: ' + err.message);
+                    },
+                    { timeout: 15000, maximumAge: 300000 }
+                );
+            });
+        } catch (err) {
+            assertIsError(err);
+            locErr = err;
+            continue;
+        }
+
+        try {
+            await fetchAndSend(location.latitude, location.longitude);
+        } catch (err) {
+            assertIsError(err);
+            console.log("Error fetching weather and sending: " + err.message);
+            console.log(err.stack);
+        }
+        return;
+    }
+
+    // NOTE: we only reach here if getting the location failed.
+    console.log(`Failed to get location after ${retries} retries: ${locErr}`);
 }
 
 //

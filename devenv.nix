@@ -37,6 +37,7 @@
   enterShell = ''
     export CC="arm-none-eabi-gcc"
     export LIBRARY_PATH=$LIBRARY_PATH:${pkgs.libiconv}/lib;
+    export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
   '';
 
   # export DYLD_FALLBACK_LIBRARY_PATH="${config.languages.rust.toolchainPackage}/lib"
