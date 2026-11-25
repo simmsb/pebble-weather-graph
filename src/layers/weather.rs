@@ -13,12 +13,13 @@ use crate::{
     modules::weather::WEATHER,
 };
 use crate::{
-    modules::weather::{TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, WEATHER_NUM_DAYS, Weather},
+    modules::weather::{TL_WEATHER_SEGS_PER_HOUR, WEATHER_CITY_MAX_LEN, Weather},
     ufmt_cstr,
 };
 
 pub const TL_WEATHER_HOURS_PER_PAGE: usize = 36;
 pub const TL_WEATHER_SEGS_PER_PAGE: usize = TL_WEATHER_HOURS_PER_PAGE * TL_WEATHER_SEGS_PER_HOUR;
+pub const TL_WEATHER_DAYS_PER_PAGE: usize = TL_WEATHER_HOURS_PER_PAGE / 24;
 pub const TL_WEATHER_CURRENT_HEIGHT: i16 = 20;
 pub const TL_WEATHER_TEMP_BOTTOM_PAD: i16 = 22 + TL_WEATHER_CURRENT_HEIGHT;
 pub const TL_WEATHER_WIDTH: usize = 200;
@@ -437,6 +438,7 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
     let now_ts = now.as_secs();
     let offset_15 = ((now_ts - weather_data.report_start as i32) / (15 * 60)) as usize;
     let offset_hour = ((now_ts - weather_data.report_start as i32) / (60 * 60)) as usize;
+    let offset_day = ((now_ts - weather_data.report_start as i32) / (60 * 60 * 24)) as usize;
 
     let mut prev = WeatherSegment::default();
     let mut prev_hr = WeatherHourly::default();
@@ -461,22 +463,28 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
         let x_i16 = x as i16;
         let scaled_15 = x * TL_WEATHER_SEGS_PER_PAGE;
         let scaled_hr = x * TL_WEATHER_HOURS_PER_PAGE;
+        let scaled_day = x * TL_WEATHER_DAYS_PER_PAGE;
 
         let segment_idx = offset_15 + scaled_15 / TL_WEATHER_WIDTH;
         let naive_next_idx = offset_15 + (scaled_15 + TL_WEATHER_SEGS_PER_PAGE) / TL_WEATHER_WIDTH;
         let mut next_segment_idx = segment_idx + 1;
-
-        let hourly_segment_idx = offset_hour + scaled_hr / TL_WEATHER_WIDTH;
-        let mut hourly_next_segment_idx = hourly_segment_idx + 1;
-
-        let is_doubled = naive_next_idx == segment_idx;
         if next_segment_idx >= weather_data.segments.len() {
             next_segment_idx = segment_idx;
         }
 
+        let hourly_segment_idx = offset_hour + scaled_hr / TL_WEATHER_WIDTH;
+        let mut hourly_next_segment_idx = hourly_segment_idx + 1;
         if hourly_next_segment_idx >= weather_data.hourly_segments.len() {
             hourly_next_segment_idx = hourly_segment_idx;
         }
+
+        let daily_segment_idx = offset_day + scaled_day / TL_WEATHER_WIDTH;
+        let mut daily_next_segment_idx = daily_segment_idx + 1;
+        if daily_next_segment_idx >= weather_data.daily.len() {
+            daily_next_segment_idx = daily_segment_idx;
+        }
+
+        let is_doubled = naive_next_idx == segment_idx;
 
         if segment_idx >= weather_data.segments.len()
             || hourly_segment_idx >= weather_data.hourly_segments.len()
@@ -518,26 +526,24 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
             draw_cloud_line(ctx, bounds, x_i16, interp_hr.cloud_cover);
         }
 
+        // This draws the 'day' information (day shortname and max/min temps)
+        // for the current day and the next day. We're triggering drawing this
+        // when we get to drawing the midnight dividing line, the reason for
+        // this is that the position of the midnight line is dependant on how
+        // many segments to the left were doubled, and I CBA working out how to
+        // calculate that analytically.
         if !is_doubled && line_is_on_midnight(now, segment_idx) {
-            let day_idx = ((now_ts - weather_data.report_start as i32) / (60 * 60 * 24)) as usize;
-            let next_day_idx = if day_idx < WEATHER_NUM_DAYS {
-                day_idx + 1
-            } else {
-                day_idx
-            };
-            if day_idx < weather_data.daily.len() && next_day_idx < weather_data.daily.len() {
-                draw_midnight_marker_and_dates(
-                    ctx,
-                    bounds,
-                    font,
-                    x_i16,
-                    interp.temperature,
-                    &weather_data.daily[day_idx],
-                    &weather_data.daily[next_day_idx],
-                    !drawn_midnight,
-                );
-                drawn_midnight = true;
-            }
+            draw_midnight_marker_and_dates(
+                ctx,
+                bounds,
+                font,
+                x_i16,
+                interp.temperature,
+                &weather_data.daily[daily_segment_idx],
+                &weather_data.daily[daily_next_segment_idx],
+                !drawn_midnight,
+            );
+            drawn_midnight = true;
         } else {
             draw_is_day(ctx, bounds, x_i16, interp.is_day);
         }
@@ -594,12 +600,12 @@ pub async fn weather_layer(container: Layer<'_>, app_messages: &OpenAppMessages<
         < (now - Duration::from_hours(1))
     {
         bordstein::info!("No saved weather or weather out of date, requesting new");
-        app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
+        let _ = app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
     }
 
     while let Some((dt, unit)) = tick_stream.next().await {
         if unit & TimeUnits::HOUR_UNIT != TimeUnits(0) {
-            app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
+            let _ = app_messages.send(|d| d.u8(bordstein::messages::WEATHER_REQUEST(), 1));
         } else if unit & TimeUnits::MINUTE_UNIT != TimeUnits(0) && (dt.mins % 15) == 0 {
             container.mark_dirty();
         }

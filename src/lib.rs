@@ -1,10 +1,5 @@
 #![no_std]
-#![feature(integer_casts)]
-#![feature(integer_widen_truncate)]
 #![feature(impl_trait_in_assoc_type)]
-#![feature(trait_alias)]
-#![feature(atomic_ptr_null)]
-#![feature(type_alias_impl_trait)]
 #![feature(maybe_uninit_as_bytes)]
 
 mod layers;

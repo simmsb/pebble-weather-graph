@@ -16,6 +16,7 @@
     python3
     libiconv
     clang
+    watchexec
     # cargo-binutils
   ];
 

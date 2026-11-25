@@ -53,9 +53,9 @@ interface WeatherCache {
     locationName: string;
 }
 
-const shouldLog = false;
+const shouldLog = true;
 
-if shouldLog {
+if (shouldLog) {
     console.log = function(...args) {
         const formattedArgs = args.map(arg => {
             if (typeof arg === 'object' && arg !== null) {

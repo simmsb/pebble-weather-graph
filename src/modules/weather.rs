@@ -4,7 +4,6 @@ use heapless::String;
 use micropb::{MessageDecode, PbDecoder};
 use bordstein::{bindings, dictionary::{DictionaryIterator, TupleValue}, storage};
 
-pub const WEATHER_NUM_DAYS: usize = 2;
 pub const TL_WEATHER_SEGS_PER_HOUR: usize = 4;
 pub const WEATHER_CITY_MAX_LEN: usize = 32;
 

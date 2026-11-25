@@ -1,7 +1,7 @@
 use micropb_gen::{Config, EncodeDecode, config::IntSize};
 
 pub const WEATHER_NUM_HOURS: usize = 48;
-pub const WEATHER_NUM_DAYS: usize = 2;
+pub const WEATHER_NUM_DAYS: usize = 3;
 pub const WEATHER_SEGS_PER_HOUR: usize = 4;
 pub const WEATHER_NUM_SEGMENTS: usize = WEATHER_NUM_HOURS * WEATHER_SEGS_PER_HOUR;
 
