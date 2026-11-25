@@ -1,13 +1,18 @@
 use core::ffi::CStr;
 
+use bordstein::{
+    bindings::{GColor, GTextAlignment, TimeUnits},
+    prelude::*,
+};
 use futures::StreamExt as _;
-use bordstein::{prelude::*, bindings::{TimeUnits, GTextAlignment, GColor}};
 
 pub async fn time_layer(container: Layer<'_>) {
     let resource = Resource::get_handle(bordstein::bindings::RESOURCE_ID_LM_MONO_48).unwrap();
     let font = Font::load_custom_font(resource);
 
-    let mut text_layer = container.new_child::<TextLayer>(container.bounds()).unwrap();
+    let mut text_layer = container
+        .new_child::<TextLayer>(container.bounds())
+        .unwrap();
     text_layer.set_font(font);
     text_layer.set_background_colour(GColor::CLEAR);
     text_layer.set_text_colour(GColor::BLACK);

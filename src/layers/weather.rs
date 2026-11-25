@@ -533,17 +533,23 @@ fn update_proc(ctx: &mut GContext<'_>, font: Font, bounds: &GRect, weather: &Wea
         // many segments to the left were doubled, and I CBA working out how to
         // calculate that analytically.
         if !is_doubled && line_is_on_midnight(now, segment_idx) {
-            draw_midnight_marker_and_dates(
-                ctx,
-                bounds,
-                font,
-                x_i16,
-                interp.temperature,
-                &weather_data.daily[daily_segment_idx],
-                &weather_data.daily[daily_next_segment_idx],
-                !drawn_midnight,
-            );
-            drawn_midnight = true;
+            // The weather data may cover fewer days than it does segments.
+            if let (Some(day_left), Some(day_right)) = (
+                weather_data.daily.get(daily_segment_idx),
+                weather_data.daily.get(daily_next_segment_idx),
+            ) {
+                draw_midnight_marker_and_dates(
+                    ctx,
+                    bounds,
+                    font,
+                    x_i16,
+                    interp.temperature,
+                    day_left,
+                    day_right,
+                    !drawn_midnight,
+                );
+                drawn_midnight = true;
+            }
         } else {
             draw_is_day(ctx, bounds, x_i16, interp.is_day);
         }

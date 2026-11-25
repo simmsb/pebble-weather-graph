@@ -48,6 +48,18 @@
     "capabilities": [
       "location",
       "configurable"
+    ],
+    "usesPermissions": [
+      "Location",
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "api.open-meteo.com",
+            "geocode.arcgis.com"
+          ]
+        }
+      }
     ]
   }
 }

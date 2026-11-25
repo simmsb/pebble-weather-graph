@@ -1,8 +1,13 @@
 use core::cell::Cell;
 
+use bordstein::{
+    bindings::{
+        GAlign, GColor, GCornerMask, GRect, GSize, GTextAlignment, GTextOverflowMode, HealthMetric,
+    },
+    prelude::*,
+};
 use futures::StreamExt as _;
 use heapless::CString;
-use bordstein::{prelude::*, bindings::{GTextAlignment, GSize, GTextOverflowMode, GRect, GColor, HealthMetric, GCornerMask, GAlign}};
 
 use crate::ufmt_cstr;
 
@@ -37,9 +42,7 @@ pub async fn biometrics_layer(container: Layer<'_>) {
         let mut hr_buf = CString::<12>::new();
         let mut steps_buf = CString::<12>::new();
 
-        let hr = HealthService::peek_current_value(
-            HealthMetric::HealthMetricHeartRateBPM,
-        );
+        let hr = HealthService::peek_current_value(HealthMetric::HealthMetricHeartRateBPM);
         let steps = HealthService::today(HealthMetric::HealthMetricStepCount);
 
         let hr_text = ufmt_cstr!(&mut hr_buf, "H {} / ", hr);

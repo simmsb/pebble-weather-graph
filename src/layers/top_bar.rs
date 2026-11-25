@@ -1,7 +1,10 @@
 use core::cell::Cell;
 
+use bordstein::{
+    bindings::{BatteryChargeState, GColor, GPoint, GRect},
+    prelude::*,
+};
 use futures::StreamExt;
-use bordstein::{prelude::*, bindings::{GPoint, GRect, GColor, BatteryChargeState}};
 
 fn draw_bluetooth_icon(ctx: &mut GContext) {
     ctx.set_stroke_colour(GColor::BLACK);

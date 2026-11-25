@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(impl_trait_in_assoc_type)]
-#![feature(maybe_uninit_as_bytes)]
 
 mod layers;
 mod layout;
@@ -26,10 +25,7 @@ async fn async_main(services: bordstein::PebbleServices, spawner: embassy_execut
     async_main_(services, spawner).await;
 }
 
-async fn async_main_(
-    mut services: bordstein::PebbleServices,
-    _spawner: embassy_executor::Spawner,
-) {
+async fn async_main_(mut services: bordstein::PebbleServices, _spawner: embassy_executor::Spawner) {
     bordstein::info!("Async main called!");
     window::with_window(async |mut h| {
         pin_init::stack_pin_init!(let app_messages = services.app_messages.open(2500, 64));

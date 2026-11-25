@@ -7,6 +7,8 @@ events.json
 node_modules/
 .cache/
 
+src/ts-build/
+
 # Build files
 build/
 screenshots/

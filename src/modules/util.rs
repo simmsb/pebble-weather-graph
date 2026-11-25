@@ -1,5 +1,3 @@
-
-
 #[macro_export]
 macro_rules! ufmt_cstr {
     ($buf:expr, $($arg:tt)*) => {

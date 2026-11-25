@@ -1,3 +1,4 @@
+import "./textEncoding"; // must come before ./gen/messages_pb
 import * as types from "./types";
 import { clayConfig } from "./config";
 import { sendAppMessage } from "pkts/lib/appMessage";
@@ -17,7 +18,7 @@ const clay = new Clay(clayConfig, null, { autoHandleEvents: false });
 const originalLog = console.log;
 
 const WEATHER_NUM_HOURS = 48;
-const WEATHER_NUM_DAYS = 2;
+const WEATHER_NUM_DAYS = 3;
 const WEATHER_SEGS_PER_HOUR = 4;
 const WEATHER_NUM_SEGMENTS = WEATHER_NUM_HOURS * WEATHER_SEGS_PER_HOUR;
 
@@ -274,7 +275,7 @@ async function getWeather() {
                     },
                     function(err) {
                         console.log("Geolocation error: " + err.message);
-                        reject('geolocation error: ' + err.message);
+                        reject(new Error('geolocation error: ' + err.message));
                     },
                     { timeout: 15000, maximumAge: 300000 }
                 );
@@ -299,6 +300,28 @@ async function getWeather() {
     console.log(`Failed to get location after ${retries} retries: ${locErr}`);
 }
 
+const REQUEST_STUCK_MS = 2 * 60 * 1000;
+let activeRequest: { startedAt: number } | null = null;
+
+// simple debounce on getWeather
+function requestWeather() {
+    const now = Date.now();
+    if (activeRequest && now - activeRequest.startedAt < REQUEST_STUCK_MS) {
+        console.log('weather request already in progress');
+        return;
+    }
+
+    const request = { startedAt: now };
+    activeRequest = request;
+    getWeather().catch(err => {
+        console.log(`Weather request failed: ${err}`);
+    }).then(() => {
+        if (activeRequest === request) {
+            activeRequest = null;
+        }
+    });
+}
+
 //
 // Event listeners
 //
@@ -306,6 +329,7 @@ async function getWeather() {
 
 Pebble.addEventListener('ready', function() {
     console.log('PebbleKit JS ready');
+    requestWeather();
 });
 
 Pebble.addEventListener('showConfiguration', function() {
@@ -343,6 +367,6 @@ Pebble.addEventListener('showConfiguration', function() {
 Pebble.addEventListener('appmessage', function(e) {
     if (e.payload && e.payload['WEATHER_REQUEST']) {
         console.log('weather refresh requested');
-        getWeather();
+        requestWeather();
     }
 });
